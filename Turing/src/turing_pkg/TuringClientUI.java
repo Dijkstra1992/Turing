@@ -1,17 +1,28 @@
 package turing_pkg;
 
+import java.awt.AWTEvent;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.EventQueue;
+import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.HeadlessException;
+import java.awt.MouseInfo;
+import java.awt.Rectangle;
+import java.awt.Toolkit;
+import java.awt.event.AWTEventListener;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -20,10 +31,15 @@ import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.StringTokenizer;
-
+/* Swing framework libraries */
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -39,8 +55,10 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
+import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import javax.swing.border.EmptyBorder;
 
 public class TuringClientUI {
 
@@ -70,10 +88,12 @@ public class TuringClientUI {
 	private static JMenuItem mntmShare;
 	
 	/* Global variables and constants */
-	private static SocketChannel client_ch = null;
+	private static SocketChannel client_ch = null; 
 	private static String userName;
+	private static Map<String, Integer> documents;
 	private static Registry turing_services;
 	private static TuringRemoteService remoteOBJ;
+	private static byte CLIENT_STATUS;
 	
 	
 	/****************************
@@ -83,10 +103,12 @@ public class TuringClientUI {
 		EventQueue.invokeLater(new Runnable() {
 			@SuppressWarnings("static-access")
 			public void run() {
+				documents = new HashMap<String, Integer>();
 				try {
-					UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+					UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); 
 					TuringClientUI window = new TuringClientUI();
-					window.mainFrame.setVisible(true);
+					CLIENT_STATUS = Config.OFFLINE;
+					window.mainFrame.setVisible(true);  
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -104,11 +126,28 @@ public class TuringClientUI {
 	/*******************************************
 	 * Initialize the contents of the frame
 	 *******************************************/
-	private void initialize() {
+	private void initialize() {		
 		mainFrame = new JFrame("TURING");
 		mainFrame.setBounds(100, 100, 800, 600);
-		mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		mainFrame.setResizable(false);
+		mainFrame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+		mainFrame.addWindowListener(new WindowAdapter() {
+			@Override
+            public void windowClosing(WindowEvent e) {
+				int selection;
+				if (CLIENT_STATUS == Config.EDITING) { // If an editing session is still active
+					selection = JOptionPane.showConfirmDialog(null, 
+							"All changes to open files will be lost. Do you really want to exit ?",
+							"Confirm close", 
+							JOptionPane.YES_NO_OPTION,
+							JOptionPane.WARNING_MESSAGE);
+					if ( selection == JOptionPane.YES_OPTION ) {
+						mainFrame.dispose();
+					}
+				}
+				else mainFrame.dispose();
+			}
+		});
 		
 		panel = new JPanel();
 		mainFrame.getContentPane().add(panel, BorderLayout.CENTER);
@@ -158,7 +197,7 @@ public class TuringClientUI {
 		mntmNew = new JMenuItem("New");
 		mntmNew.addActionListener(new ActionListener() { // NEW button listener
 			public void actionPerformed(ActionEvent evt) {
-				newdocActionPerformed(evt);
+				newdocActionPerformed();
 			}
 		});
 		mntmNew.setEnabled(false);
@@ -167,7 +206,7 @@ public class TuringClientUI {
 		mntmList = new JMenuItem("List");
 		mntmList.addActionListener(new ActionListener() { // LIST button listener
 			public void actionPerformed(ActionEvent evt) {
-				listActionPerformed(evt);
+				listActionPerformed();
 			}
 		});
 		mntmList.setEnabled(false);
@@ -179,7 +218,7 @@ public class TuringClientUI {
 		mntmRegister = new JMenuItem("Register");
 		mntmRegister.addActionListener(new ActionListener() { // REGISTER menu listener
 			public void actionPerformed(ActionEvent evt) {
-				registerActionPerformed(evt);
+				registerActionPerformed();
 			}
 		});
 		mnAccount.add(mntmRegister);
@@ -187,7 +226,7 @@ public class TuringClientUI {
 		mntmLogin = new JMenuItem("Login");
 		mntmLogin.addActionListener(new ActionListener() { // LOGIN menu listener
 			public void actionPerformed(ActionEvent evt) {
-				loginActionPerformed(evt);
+				loginActionPerformed();
 			}
 		});
 		mnAccount.add(mntmLogin);
@@ -195,7 +234,7 @@ public class TuringClientUI {
 		mntmLogout = new JMenuItem("Logout");
 		mntmLogout.addActionListener(new ActionListener() { // LOGOUT menu listener
 			public void actionPerformed(ActionEvent evt) {
-				logoutActionPerformed(evt);
+				logoutActionPerformed();
 			}
 		});
 		mnAccount.add(mntmLogout);
@@ -211,17 +250,17 @@ public class TuringClientUI {
 	/************************
 	 * event triggers 
 	 ************************/
-	private static void registerActionPerformed(ActionEvent evt) {
+	private static void registerActionPerformed() {
 		JDialog regDialog = registerDialog();
 		regDialog.setVisible(true);
 	}
 
-	private static void loginActionPerformed(ActionEvent evt) {
+	private static void loginActionPerformed() {
 		JDialog logDialog = loginDialog();
 		logDialog.setVisible(true);
 	}
 	
-	private static void logoutActionPerformed(ActionEvent evt) {
+	private static void logoutActionPerformed() {
 		try {
 			logoutRequest();
 		} catch (IOException e) {
@@ -229,266 +268,258 @@ public class TuringClientUI {
 		}
 	}
 	
-	private static void newdocActionPerformed(ActionEvent evt) {
+	private static void newdocActionPerformed() {
 		JDialog docDialog = newDocDialog();
 		docDialog.setVisible(true);
 	}
 
-	private static void listActionPerformed(ActionEvent evt) {
+	private static void listActionPerformed() {
 		JDialog listDialog = fileExplorer();
 		if (listDialog != null) listDialog.setVisible(true);
 	}
 	
-	private static void shareActionPerformed(ActionEvent evt, String arg) {
-		JDialog shareDialog = shareDocDialog(arg);
+	private static void shareActionPerformed(String filename) {
+		JDialog shareDialog = shareDocDialog(filename);
 		shareDialog.setVisible(true);
 	}
 	
-	private static void editActionPerformed(ActionEvent evt, String arg) {
-		JDialog editDialog = editSectionDialog(arg);
-		editDialog.setVisible(true);		
-	}
 	/********************************** UI DIALOG BUILDERS ***********************************************/
 	
 	private static JDialog registerDialog() {
 		
 		JDialog dialog = new JDialog(mainFrame, "Register", true);
-		JPanel panel = new JPanel();
-		panel.setLayout(new GridBagLayout());
-		dialog.setSize(400, 150);
+		JPanel contentPanel = new JPanel();
+		dialog.setBounds(100, 100, 450, 300);
+		dialog.getContentPane().setLayout(new BorderLayout());
+		contentPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
+		dialog.getContentPane().add(contentPanel, BorderLayout.CENTER);
+		contentPanel.setLayout(null);
 		dialog.setResizable(false);
-		dialog.setLocationRelativeTo(mainFrame);
-	
-		GridBagConstraints layout_cs = new GridBagConstraints();	//Panel layout constraints
-		layout_cs.fill = GridBagConstraints.HORIZONTAL;
 		
-		/* panel components*/
-		JLabel userLabel = new JLabel("Username : ");
-		JLabel passLabel = new JLabel("Password : ");
-		JTextField userField = new JTextField(16);
-		JPasswordField passField = new JPasswordField(16);
-		JButton regButton = new JButton("Register");
+		JLabel lblUsername = new JLabel("Username: ");
+		lblUsername.setBounds(85, 80, 75, 20);
+		contentPanel.add(lblUsername);
 		
-		/* adding components to dialog pane */
-		layout_cs.gridx = 0;
-		layout_cs.gridy = 0;
-		panel.add(userLabel, layout_cs);
+		JTextField userfield = new JTextField();
+		userfield.setBounds(170, 80, 110, 20);
+		contentPanel.add(userfield);
+		userfield.setColumns(10);
 		
-		layout_cs.gridx = 1;
-		layout_cs.gridy = 0;
-		panel.add(userField, layout_cs);
+		JLabel lblPassword = new JLabel("Password: ");
+		lblPassword.setBounds(85, 115, 75, 20);
+		contentPanel.add(lblPassword);
 		
-		layout_cs.gridx = 0;
-		layout_cs.gridy = 1;
-		panel.add(passLabel, layout_cs);
+		JPasswordField passfield = new JPasswordField();
+		passfield.setColumns(10);
+		passfield.setBounds(170, 115, 110, 20);
+		contentPanel.add(passfield);
 		
-		layout_cs.gridx = 1;
-		layout_cs.gridy = 1;
-		panel.add(passField, layout_cs);
-		
-		layout_cs.gridx = 1;
-		layout_cs.gridy = 3;
-		panel.add(regButton, layout_cs);
-		
-		dialog.add(panel);
-		
-		/* button listener */
-		regButton.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent e) {
-				String username = new String(userField.getText());
-				char[] password = passField.getPassword();
-				
-				if (!isValidUser(username, password)) {
-					JOptionPane.showMessageDialog(
-							mainFrame, 
-							"Invalid credentials", 
-							"Invalid username/password: password must be at least 5 characters long", 
-							JOptionPane.ERROR_MESSAGE);
-				}
-				
-				else {
-					/* retrieving remote registration method */
-					try {
-						turing_services = LocateRegistry.getRegistry(Config.REMOTE_SERVICE_PORT);
-						remoteOBJ = (TuringRemoteService) turing_services.lookup("registerOP");
-						
-						if ( remoteOBJ.registerOP(username, password) ) {
-							JOptionPane.showMessageDialog(
-									mainFrame, 
-									"Successfully registered", 
-									"Success!", 
-									JOptionPane.INFORMATION_MESSAGE);
-						}
-						else {
-							JOptionPane.showMessageDialog( 
-									mainFrame, 
-									"This username is not available",
-									"Invalid username/password", 
-									JOptionPane.INFORMATION_MESSAGE);
-						}
-						dialog.dispose();
-					}catch (NotBoundException | HeadlessException | RemoteException ex) {
-						JOptionPane.showMessageDialog(
-								mainFrame, 
-								"Unable to reach the server, try again later", 
-								"COM_ERROR", 
-								JOptionPane.ERROR_MESSAGE);
-					}			
-				}
+		JCheckBox chckbxShow = new JCheckBox("Show");
+		chckbxShow.setBounds(301, 115, 65, 20);
+		chckbxShow.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent evt) {
+				if (chckbxShow.isSelected()) passfield.setEchoChar((char)0);
+				else passfield.setEchoChar(new Character((char)0x25CF));
 			}
 		});
+		contentPanel.add(chckbxShow);
+		
+		JButton btnRegister = new JButton("Register");
+		btnRegister.setBounds(150, 175, 100, 30);
+		contentPanel.add(btnRegister);
+		
+		JLabel lblWelcomeToTuring = new JLabel("Welcome in Turing!");
+		lblWelcomeToTuring.setHorizontalAlignment(SwingConstants.CENTER);
+		lblWelcomeToTuring.setFont(new Font("Microsoft JhengHei", Font.BOLD, 19));
+		lblWelcomeToTuring.setBounds(85, 11, 265, 60);
+		contentPanel.add(lblWelcomeToTuring);
+		
+		/* event listeners */
+		btnRegister.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+			String username = new String(userfield.getText());
+			char[] password = passfield.getPassword();
+			
+			if (!isValidUser(username, password)) {
+				JOptionPane.showMessageDialog(
+						mainFrame, 
+						"Invalid credentials", 
+						"Invalid username/password: password must be at least 5 characters long", 
+						JOptionPane.ERROR_MESSAGE);
+			}
+			
+			else {
+				/* retrieving remote registration method */
+				try {
+					turing_services = LocateRegistry.getRegistry(Config.REMOTE_SERVICE_PORT);
+					remoteOBJ = (TuringRemoteService) turing_services.lookup("registerOP");
+					
+					if ( remoteOBJ.registerOP(username, password) ) {
+						JOptionPane.showMessageDialog(
+								mainFrame, 
+								"Successfully registered", 
+								"Success!", 
+								JOptionPane.INFORMATION_MESSAGE);
+					}
+					else {
+						JOptionPane.showMessageDialog( 
+								mainFrame, 
+								"This username is not available",
+								"Invalid username/password", 
+								JOptionPane.INFORMATION_MESSAGE);
+					}
+					dialog.dispose();
+				}catch (NotBoundException | HeadlessException | RemoteException ex) {
+					JOptionPane.showMessageDialog(
+							mainFrame, 
+							"Unable to reach the server, try again later", 
+							"COM_ERROR", 
+							JOptionPane.ERROR_MESSAGE);
+				}			
+			}
+		}
+	});
 		
 		return dialog;
 	}
 
 	private static JDialog loginDialog() {
+		
 		JDialog dialog = new JDialog(mainFrame, "Login", true);
-		JPanel panel = new JPanel();
-		panel.setLayout(new GridBagLayout());
-		dialog.setSize(400, 150);
+		JPanel contentPanel = new JPanel();
+		dialog.setBounds(100, 100, 450, 300);
+		dialog.getContentPane().setLayout(new BorderLayout());
+		contentPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
+		dialog.getContentPane().add(contentPanel, BorderLayout.CENTER);
+		contentPanel.setLayout(null);
 		dialog.setResizable(false);
-		dialog.setLocationRelativeTo(mainFrame);
-	
-		GridBagConstraints layout_cs = new GridBagConstraints();	//Panel layout constraints
-		layout_cs.fill = GridBagConstraints.HORIZONTAL;
 		
-		/* panel components*/
-		JLabel userLabel = new JLabel("Username : ");
-		JLabel passLabel = new JLabel("Password : ");
-		JTextField userField = new JTextField(16);
-		JPasswordField passField = new JPasswordField(16);
-		JButton logButton = new JButton("Login");
+		JLabel lblUsername = new JLabel("Username: ");
+		lblUsername.setBounds(85, 80, 75, 20);
+		contentPanel.add(lblUsername);
 		
-		/* adding components to dialog pane */
-		layout_cs.gridx = 0;
-		layout_cs.gridy = 0;
-		panel.add(userLabel, layout_cs);
+		JTextField userfield = new JTextField();
+		userfield.setBounds(170, 80, 110, 20);
+		contentPanel.add(userfield);
+		userfield.setColumns(10);
 		
-		layout_cs.gridx = 1;
-		layout_cs.gridy = 0;
-		panel.add(userField, layout_cs);
+		JLabel lblPassword = new JLabel("Password: ");
+		lblPassword.setBounds(85, 116, 75, 20);
+		contentPanel.add(lblPassword);
 		
-		layout_cs.gridx = 0;
-		layout_cs.gridy = 1;
-		panel.add(passLabel, layout_cs);
+		JPasswordField passfield = new JPasswordField();
+		passfield.setColumns(10);
+		passfield.setBounds(170, 116, 110, 20);
+		contentPanel.add(passfield);
 		
-		layout_cs.gridx = 1;
-		layout_cs.gridy = 1;
-		panel.add(passField, layout_cs);
+		JCheckBox chckbxShow = new JCheckBox("Show");
+		chckbxShow.setBounds(300, 115, 65, 20);
+		contentPanel.add(chckbxShow);
 		
-		layout_cs.gridx = 1;
-		layout_cs.gridy = 3;
-		panel.add(logButton, layout_cs);
+		JButton btnLogin = new JButton("Login");
+		btnLogin.setBounds(150, 175, 100, 30);
+		contentPanel.add(btnLogin);
 		
-		dialog.add(panel);
+		JLabel lblWelcomeToTuring = new JLabel("Welcome in Turing!");
+		lblWelcomeToTuring.setHorizontalAlignment(SwingConstants.CENTER);
+		lblWelcomeToTuring.setFont(new Font("Microsoft JhengHei", Font.BOLD, 19));
+		lblWelcomeToTuring.setBounds(85, 11, 265, 58);
+		contentPanel.add(lblWelcomeToTuring);
 		
-		/* button listeners */
-		logButton.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent e){
-				String username = new String(userField.getText());
-				char[] password = passField.getPassword();
-								
-				if (!(isValidUser(username, password))) {
-					JOptionPane.showMessageDialog(
-							mainFrame, 
-							"Please choose a valid Username and Password", 
-							"Invalid username/password", 
-							JOptionPane.ERROR_MESSAGE);
-				}
-			
-				else {
-					/* connecting to server and sending login request */
-					InetSocketAddress server_address = new InetSocketAddress(Config.SERVER_IP, Config.SERVER_PORT);
-					try {
-						client_ch = SocketChannel.open(server_address);
-						loginRequest(username, password);
-						byte r;
-						if ( (r=getResponse()) == Config.SUCCESS ) {
-							statusBar.setText(username + " - Online");
-							mntmRegister.setEnabled(false);
-							mntmLogin.setEnabled(false);
-							mntmLogout.setEnabled(true);
-							userName = new String(username);
-							enableOnlineService();
-							JOptionPane.showMessageDialog(mainFrame, "Successfully logged in");
-							dialog.dispose();
-						}
-						else {
-							JOptionPane.showMessageDialog(mainFrame, Config.ERROR_LOG(r));
-						}
-					} catch (IOException log_ex) {
-						JOptionPane.showMessageDialog(
-								mainFrame, 
-								"Unable to reach the server, try again later", 
-								"COM_ERROR", 
-								JOptionPane.ERROR_MESSAGE);
-					} 
-				}
+		/* event listeners */
+		chckbxShow.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent evt) {
+				if (chckbxShow.isSelected()) passfield.setEchoChar((char)0);
+				else passfield.setEchoChar(new Character((char)0x25CF));
 			}
 		});
-
+		
+		btnLogin.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e){
+			String username = new String(userfield.getText());
+			char[] password = passfield.getPassword();
+							
+			if (!(isValidUser(username, password))) {
+				JOptionPane.showMessageDialog(
+						mainFrame, 
+						"Please choose a valid Username and Password", 
+						"Invalid username/password", 
+						JOptionPane.ERROR_MESSAGE);
+			}
+		
+			else {
+				/* connecting to server and sending login request */
+				InetSocketAddress server_address = new InetSocketAddress(Config.SERVER_IP, Config.SERVER_PORT);
+				try {
+					client_ch = SocketChannel.open(server_address);
+					loginRequest(username, password);
+					byte r;
+					if ( (r=getResponse()) == Config.SUCCESS ) {
+						statusBar.setText(username + " - Online");
+						mntmRegister.setEnabled(false);
+						mntmLogin.setEnabled(false);
+						mntmLogout.setEnabled(true);
+						userName = new String(username);
+						enableOnlineService();
+						JOptionPane.showMessageDialog(mainFrame, "Successfully logged in");
+						dialog.dispose();
+					}
+					else {
+						JOptionPane.showMessageDialog(mainFrame, Config.ERROR_LOG(r));
+					}
+				} catch (IOException log_ex) {
+					JOptionPane.showMessageDialog(
+							mainFrame, 
+							"Unable to reach the server, try again later", 
+							"COM_ERROR", 
+							JOptionPane.ERROR_MESSAGE);
+				} 
+			}
+		}
+	});
+		
 		return dialog;
 	}
 
 	private static JDialog newDocDialog() {
 		
-		JDialog dialog = new JDialog(mainFrame, "New document creation", true);
-		JPanel panel = new JPanel();
-		panel.setLayout(new GridBagLayout());
-		dialog.setSize(400, 150);
-		dialog.setResizable(false);
-		dialog.setLocationRelativeTo(mainFrame);
+		JDialog dialog = new JDialog(mainFrame, "New Document", true);
+		dialog.setBounds(100, 100, 450, 300);
+		dialog.getContentPane().setLayout(null);
 		
-		JLabel doc_name = new JLabel("Name: ");
-		JLabel sections_num = new JLabel("Sections: ");
-		JTextField name = new JTextField(16);
-		JTextField sections = new JTextField(16);
-		JButton createButton = new JButton("Create");
-		JButton cancButton = new JButton("Cancel");
+		JLabel lblName = new JLabel("Title: ");
+		lblName.setHorizontalAlignment(SwingConstants.RIGHT);
+		lblName.setBounds(80, 90, 65, 20);
+		dialog.getContentPane().add(lblName);
 		
-		GridBagConstraints layout_cs = new GridBagConstraints();	//Panel layout constraints
-		layout_cs.fill = GridBagConstraints.HORIZONTAL;
+		JLabel lblsections = new JLabel("#Sections: ");
+		lblsections.setHorizontalAlignment(SwingConstants.RIGHT);
+		lblsections.setBounds(80, 125, 65, 20);
+		dialog.getContentPane().add(lblsections);
 		
-		/* adding components to dialog pane */
-		layout_cs.gridx = 0;
-		layout_cs.gridy = 0;
-		panel.add(doc_name, layout_cs);
+		JTextField namefield = new JTextField();
+		namefield.setBounds(155, 90, 135, 20);
+		dialog.getContentPane().add(namefield);
 		
-		layout_cs.gridx = 1;
-		layout_cs.gridy = 0;
-		panel.add(name, layout_cs);
+		JTextField sectionfield = new JTextField();
+		sectionfield.setBounds(155, 125, 135, 20);
+		dialog.getContentPane().add(sectionfield);
 		
-		layout_cs.gridx = 0;
-		layout_cs.gridy = 1;
-		panel.add(sections_num, layout_cs);
+		JButton btnCreate = new JButton("Create");
+		btnCreate.setBounds(155, 175, 90, 30);
+		dialog.getContentPane().add(btnCreate);
 		
-		layout_cs.gridx = 1;
-		layout_cs.gridy = 1;
-		panel.add(sections, layout_cs);
-		
-		layout_cs.gridx = 3;
-		layout_cs.gridy = 0;
-		panel.add(createButton, layout_cs);
-		
-		layout_cs.gridx = 3;
-		layout_cs.gridy = 1;
-		panel.add(cancButton, layout_cs);
-		
-		dialog.add(panel);
-		
-		/* button listeners */
-		cancButton.addActionListener(new ActionListener() {
+		/* event listeners */
+		btnCreate.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				name.setText("");
-				sections.setText("");
-			}
-		});
-		
-		createButton.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent e) {
-				String filename = new String(name.getText());
-				int section_num = Integer.parseInt(sections.getText());
-				
+			String filename = new String(namefield.getText());
+			int section_num = Integer.parseInt(sectionfield.getText());
+			
+			if (filename.contains("-")) {
+				JOptionPane.showMessageDialog(mainFrame, "Illegal character ' - '");
+			} else if (section_num < 1) {
+				JOptionPane.showMessageDialog(mainFrame, "Please select a valid section number");
+			} else {
 				try {
 					newDocRequest(filename, section_num);
 				} catch (UnsupportedEncodingException e2) {
@@ -506,13 +537,14 @@ public class TuringClientUI {
 				} catch (HeadlessException | IOException req_ex) {
 					req_ex.printStackTrace();
 				}
-			}
-		});
-				
+			}			
+		}
+	});
+		
 		return dialog;
 	}
 	
-	private static JDialog shareDocDialog(String arg) {
+	private static JDialog shareDocDialog(String filename) {
 		JDialog dialog = new JDialog(mainFrame, "Share document", true);
 		JPanel panel = new JPanel();
 		panel.setLayout(new GridBagLayout());
@@ -545,12 +577,12 @@ public class TuringClientUI {
 		shareButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				String destinatary = new String(dest.getText());
-				String filename = new String(arg);
+				String file_name = new String(filename);
 				try {
-					shareRequest(filename, destinatary);
+					shareRequest(file_name, destinatary);
 					byte r;
 					if ( (r=getResponse()) == Config.SUCCESS ) {
-						JOptionPane.showMessageDialog(mainFrame, filename + " successfully shared with " + destinatary);
+						JOptionPane.showMessageDialog(mainFrame, file_name + " successfully shared with " + destinatary);
 						dialog.dispose();
 					}
 					else {
@@ -567,69 +599,15 @@ public class TuringClientUI {
 				
 		return dialog;
 	}
-	
-	private static JDialog editSectionDialog(String filename) {
-		JDialog dialog = new JDialog(mainFrame, "Edit section", true);
-		JPanel panel = new JPanel();
-		
-		panel.setLayout(new GridBagLayout());
-		dialog.setSize(400, 150);
-		dialog.setResizable(false);
-		dialog.setLocationRelativeTo(file_explorer);
-		
-		JLabel sect_label = new JLabel("Section #: ");
-		JTextField sect = new JTextField(16);
-		JButton editBtn = new JButton("Edit");
-		
-		GridBagConstraints layout_cs = new GridBagConstraints();	//Panel layout constraints
-		layout_cs.fill = GridBagConstraints.HORIZONTAL;
-		
-		/* adding components to dialog pane */
-		layout_cs.gridx = 0;
-		layout_cs.gridy = 0;
-		panel.add(sect_label, layout_cs);
-		
-		layout_cs.gridx = 1;
-		layout_cs.gridy = 0;
-		panel.add(sect, layout_cs);
-		
-		layout_cs.gridx = 2;
-		layout_cs.gridy = 0;
-		panel.add(editBtn, layout_cs);
-		
-		dialog.add(panel);
-		
-		editBtn.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent e) {
-				try {
-					String file_text = downloadFile(filename, Integer.parseInt(sect.getText()));
-					if (file_text == null) {
-						JOptionPane.showMessageDialog(mainFrame, "Error retrieving file");
-					}
-					else { // show text editor window
-						JDialog editor = fileEditor(filename, file_text, (Integer.parseInt(sect.getText())));
-						editor.setLocation(mainFrame.getX() + mainFrame.getWidth(), mainFrame.getY());
-						editor.setVisible(true);
-						dialog.dispose();
-						enableChat();
-					}
-				} catch (UnsupportedEncodingException encode_ex) {
-					encode_ex.printStackTrace();
-				}
-			}
-		});
-		
-		return dialog;
-	}
-	
+
 	private static JDialog fileExplorer() {
-		JDialog dialog = new JDialog(mainFrame, "My files", true);
+		JDialog dialog = new JDialog(mainFrame, "My files");
 		JPanel panel = new JPanel();
 		
-		mntmEdit = new JMenuItem("Edit");
+		mntmEdit = new JMenuItem("Edit section");
 		mntmShowSection = new JMenuItem("Show section");
 		mntmShow = new JMenuItem("Show document");
-		mntmShare = new JMenuItem("Share");
+		mntmShare = new JMenuItem("Share document");
 		
 		dialog.setSize(320, 240);
 		dialog.setResizable(true);
@@ -641,9 +619,10 @@ public class TuringClientUI {
 		file_explorer = new JList<String>(list);
 		file_explorer.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		exp_scroll = new JScrollPane(file_explorer);
-		exp_scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+		exp_scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+		exp_scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
 		
-		final JPopupMenu selectionMenu = new JPopupMenu();
+		JPopupMenu selectionMenu = new JPopupMenu();
 		selectionMenu.add(mntmEdit);
 		selectionMenu.add(mntmShowSection);
 		selectionMenu.add(mntmShow);
@@ -662,17 +641,52 @@ public class TuringClientUI {
 		/* adding popup menu item triggers */
 		mntmShare.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
-				shareActionPerformed(evt, list.getElementAt(file_explorer.getSelectedIndex()));
+				shareActionPerformed(list.getElementAt(file_explorer.getSelectedIndex()));
 			}
 		});
-		
+				
 		mntmEdit.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
-				editActionPerformed(evt, list.getElementAt(file_explorer.getSelectedIndex()));
+				String selected_file = new String(file_explorer.getSelectedValue());
+				JPopupMenu popup = editPopupMenu(selected_file, documents.get(selected_file));
+				popup.setLocation(MouseInfo.getPointerInfo().getLocation());
+				armPopup(popup);
+				popup.setVisible(true);
+				
 			}
 		});
 		
-		panel.add(file_explorer);
+		mntmShowSection.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent evt) {
+				String selected_file = new String(file_explorer.getSelectedValue());
+				JPopupMenu popup = showSectionPopupMenu(selected_file, documents.get(selected_file));
+				popup.setLocation(MouseInfo.getPointerInfo().getLocation());
+				armPopup(popup);
+				popup.setVisible(true);
+			}
+		});
+		
+		mntmShow.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent evt) {
+				String selected_file = new String(file_explorer.getSelectedValue());
+				try {
+					String text = downloadFile(selected_file);
+					System.out.println("Received text: " + text);
+					JDialog viewer = new JDialog();
+					JTextArea textArea = new JTextArea();
+					textArea.setEditable(false);
+					viewer.setTitle(selected_file);
+					viewer.add(textArea);
+					textArea.setText(text);
+					viewer.setLocationRelativeTo(file_explorer);
+					viewer.setSize(480, 480);
+					viewer.setVisible(true);
+				}
+				catch (IOException ex) {ex.printStackTrace();}
+			}
+		});
+		
+		panel.add(exp_scroll);
 		dialog.add(panel);
 		boolean res = false;
 		try {
@@ -683,31 +697,49 @@ public class TuringClientUI {
 		if (res) return dialog;
 		return null;
 	}
-
+	
 	private static JDialog fileEditor(String filename, String text, int section) {
-		JDialog dialog = new JDialog();
-		JMenuBar menu_bar = new JMenuBar();
-		JMenu mnFile = new JMenu("File");
-		JMenuItem mntmSave = new JMenuItem("Save");
-		JTextArea textArea = new JTextArea();
-		JScrollPane textScroll = new JScrollPane(textArea);
+		final JDialog dialog = new JDialog(mainFrame, filename);
+		final JMenuBar menu_bar = new JMenuBar();
+		final JMenu mnFile = new JMenu("File");
+		final JMenuItem mntmSave = new JMenuItem("Save");
+		final JTextArea textArea = new JTextArea();
+		final JScrollPane textScroll = new JScrollPane(textArea);
 		
-		dialog.setTitle(filename);
+		dialog.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+		dialog.addWindowListener(new WindowAdapter() {
+			@Override
+            public void windowClosing(WindowEvent e) {
+				int confirm;
+				confirm = JOptionPane.showConfirmDialog(dialog, 
+						"Do you really want to exit? Any unsaved action will be lost",
+						"Exit edit mode",
+						JOptionPane.YES_NO_OPTION,
+						JOptionPane.WARNING_MESSAGE);
+				if ( confirm == JOptionPane.YES_OPTION ) {
+					try {endEditRequest(filename, section); } catch (UnsupportedEncodingException ue) {ue.printStackTrace();}
+					dialog.dispose();
+				}
+			}
+		});		
 		dialog.setSize(new Dimension(800, 600));
 		
 		menu_bar.add(mnFile);
 		mnFile.add(mntmSave);
 		
-		textArea.setBorder(panel.getBorder());
-		textArea.setText(text);
-		
+		textArea.setEditable(true);
+		textArea.setLineWrap(true);
+		textArea.setWrapStyleWord(true);		
+		textArea.setText(text.trim());
+				
 		textScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 		textScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 		
 		mntmSave.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
 				try {
-					endEditRequest(filename, textArea.getText(), section);
+					String text = new String(textArea.getText());
+					updateSectionRequest(filename, text, section);
 					byte r;
 					r = getResponse();
 					if ( r != Config.SUCCESS) { // saving file failed
@@ -723,8 +755,119 @@ public class TuringClientUI {
 		});
 		
 		dialog.setJMenuBar(menu_bar);
-		dialog.add(textArea);
+		dialog.add(textScroll);
 		return dialog;
+	}
+
+	private static JPopupMenu editPopupMenu(String filename, int sections) {
+		JPopupMenu popupMenu = new JPopupMenu();
+		JPanel panel = new JPanel();
+		JComboBox<Integer> s_lister = new JComboBox<Integer>();
+		JButton btnEdit = new JButton("Edit");
+		JButton btnCancel = new JButton("Cancel");
+		
+		for (int i=0; i<sections; i++) {
+			s_lister.addItem(i);
+		}
+		
+		// Edit button listener
+		btnEdit.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent evt) {
+				if (CLIENT_STATUS == Config.EDITING) {
+					JOptionPane.showMessageDialog(
+							mainFrame,
+							"You need to close current editing session before starting a new one");
+					return;
+				}
+				int s = s_lister.getSelectedIndex(); 
+				String text;
+				try {
+					System.out.println("downloadSection invoked");
+					text = downloadSection(filename, s, Config.EDIT_R);
+					if (text != null) {
+						System.out.println("File downloaded, " + text.getBytes().length);
+						JDialog editor = fileEditor(filename, text, s);
+						System.out.println("Editor instance created...");
+						editor.setLocation(mainFrame.getX() + mainFrame.getWidth(), mainFrame.getY());
+						editor.setVisible(true);
+						enableChat();
+					} 
+					popupMenu.setVisible(false);	
+				} catch (UnsupportedEncodingException e) {
+					JOptionPane.showMessageDialog(mainFrame, e.getMessage(), "ERROR", JOptionPane.ERROR_MESSAGE);
+				}
+			}
+		});
+	
+		// Cancel button listener
+		btnCancel.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent evt) {
+				popupMenu.setVisible(false);
+			}
+		});
+		
+		panel.setLayout(new FlowLayout());
+		panel.add(s_lister);
+		panel.add(btnEdit);
+		panel.add(btnCancel);
+		
+		popupMenu.add(panel);
+		
+		return popupMenu;
+	}
+	
+	private static JPopupMenu showSectionPopupMenu(String filename, int sections) {
+		JPopupMenu popupMenu = new JPopupMenu();
+		JPanel panel = new JPanel();
+		JComboBox<Integer> s_lister = new JComboBox<Integer>();
+		JButton btnShow = new JButton("Show");
+		JButton btnCancel = new JButton("Cancel");
+		
+		for (int i=0; i<sections; i++) {
+			s_lister.addItem(i);
+		}
+		
+		btnShow.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent evt) {
+				int s = s_lister.getSelectedIndex(); 
+				String text;
+				try {
+					text = downloadSection(filename, s, Config.SHOW_R);
+					if (text == null) {
+						JOptionPane.showMessageDialog(file_explorer, "Error retrieving selected file");
+					} else {
+						System.out.println(text);
+						JDialog viewer = new JDialog();
+						JTextArea textArea = new JTextArea();
+						textArea.setEditable(false);
+						viewer.setTitle(filename + ", section " + s);
+						viewer.add(textArea);
+						textArea.setText(text);
+						viewer.setLocationRelativeTo(file_explorer);
+						viewer.setSize(480, 480);
+						viewer.setVisible(true);
+						
+					}
+				} catch (UnsupportedEncodingException e) {
+					JOptionPane.showMessageDialog(mainFrame, e.getMessage(), "ERROR", JOptionPane.ERROR_MESSAGE);
+				}
+			}
+		});
+		
+		btnCancel.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent evt) {
+				popupMenu.setVisible(false);
+			}
+		});
+		
+		panel.setLayout(new FlowLayout());
+		panel.add(s_lister);
+		panel.add(btnShow);
+		panel.add(btnCancel);
+		
+		popupMenu.add(panel);
+		
+		return popupMenu;
 	}
 	
 	/******************************************** REQUESTS *************************************************/
@@ -732,7 +875,7 @@ public class TuringClientUI {
 	/* Sends a login request to the server */
 	private static void loginRequest(String username, char[] password) throws UnsupportedEncodingException {
 		
-		ByteBuffer request = ByteBuffer.allocate(Config.REQ_BUF_SIZE);
+		ByteBuffer request = ByteBuffer.allocate(Config.BUF_SIZE);
 		byte name_size = (byte) username.length();
 		byte pass_size = (byte) password.length;
 			
@@ -763,7 +906,7 @@ public class TuringClientUI {
 			JOptionPane.showMessageDialog(mainFrame, "Server unreachable!");
 			return;
 		}
-		ByteBuffer buffer = ByteBuffer.allocate(Config.REQ_BUF_SIZE);
+		ByteBuffer buffer = ByteBuffer.allocate(Config.BUF_SIZE);
 		buffer.put(Config.LOGOUT_R);
 		buffer.put((byte) userName.length());
 		buffer.put(userName.getBytes(Config.DEFAULT_ENCODING));
@@ -792,7 +935,7 @@ public class TuringClientUI {
 			return;
 		}
 		
-		ByteBuffer request = ByteBuffer.allocate(Config.REQ_BUF_SIZE);
+		ByteBuffer request = ByteBuffer.allocate(Config.BUF_SIZE);
 		request.put(Config.NEW_R);
 		request.put((byte) userName.length());
 		request.put((byte) filename.length());
@@ -818,31 +961,41 @@ public class TuringClientUI {
 			return false;
 		}
 		
-		ByteBuffer request = ByteBuffer.allocate(Config.REQ_BUF_SIZE);
+		ByteBuffer buffer = ByteBuffer.allocate(Config.BUF_SIZE);
 		byte name_size = (byte) userName.length();
 		
-		request.put(Config.LIST_R);
-		request.put(name_size);
-		request.put(userName.getBytes(Config.DEFAULT_ENCODING));
+		buffer.put(Config.LIST_R);
+		buffer.put(name_size);
+		buffer.put(userName.getBytes(Config.DEFAULT_ENCODING));
 		
-		request.flip();
+		buffer.flip();
 		
 		try {
-			client_ch.write(request);
+			client_ch.write(buffer);
 			byte r;
 			if ( (r = getResponse()) != Config.SUCCESS ) { // file list retrievement failed
 				JOptionPane.showMessageDialog(mainFrame, Config.ERROR_LOG(r));
 				return false;
 			}
 			else { // receiving file list
-				ByteBuffer buffer = ByteBuffer.allocate(Config.MAX_BUF_SIZE);
+				buffer.clear();
 				client_ch.read(buffer);
 				buffer.flip();
 				byte[] files_list = buffer.array();
 				String files = new String(files_list, Config.DEFAULT_ENCODING);
-				StringTokenizer s_tok = new StringTokenizer(files);
+				System.out.println("Received file list: " + files);
+				StringTokenizer s_tok = new StringTokenizer(files, "-");
 				while (s_tok.hasMoreTokens()) {
-					list.addElement(s_tok.nextToken());
+					try { 
+						String current_file = new String(s_tok.nextToken());
+						String current_sect = new String(s_tok.nextToken());
+						System.out.println(current_file + ", " + current_sect); 
+						int sections = Integer.parseInt(current_sect, 10);
+						list.addElement(current_file); //adding filename to file explorer list
+						if (!documents.containsKey(current_file)) { //adding file to client's local documents list if needed
+							documents.put(current_file, sections);
+						}
+					} catch (NoSuchElementException end_ex) {} // last element is just a delimiter token	
 				}
 			}
 		} catch (IOException req_ex) {
@@ -858,7 +1011,7 @@ public class TuringClientUI {
 			JOptionPane.showMessageDialog(mainFrame, "Server currently offline, try again later");
 		}
 		
-		ByteBuffer request = ByteBuffer.allocate(Config.REQ_BUF_SIZE);
+		ByteBuffer request = ByteBuffer.allocate(Config.BUF_SIZE);
 		byte name_size = (byte) userName.length();
 		byte fname_size = (byte) filename.length();
 		byte destname_size = (byte) destinatary.length();
@@ -881,72 +1034,145 @@ public class TuringClientUI {
 		}
 	}
 	
-	/* Sends a request to download the selected file */
-	private static String downloadFile(String filename, int section) throws UnsupportedEncodingException {
+	/* Sends a request to download the selected file section */
+	private static String downloadSection(String filename, int section, byte mode) throws UnsupportedEncodingException {
 		
 		if (!serverOnline()) {
 			JOptionPane.showMessageDialog(mainFrame, "Server currently offline, try again later");
+			return null;
 		}
 		
-		ByteBuffer request = ByteBuffer.allocate(Config.REQ_BUF_SIZE);
+		ByteBuffer request = ByteBuffer.allocate(Config.BUF_SIZE);
 		byte name_size = (byte) userName.length();
 		byte fname_size = (byte) filename.length();
 		
-		request.put(Config.DOWNLOAD_R);
+		request.put(Config.EDIT_R);
 		request.put(name_size);
 		request.put(fname_size);
-		
 		request.put(userName.getBytes(Config.DEFAULT_ENCODING));
 		request.put(filename.getBytes(Config.DEFAULT_ENCODING));
-		request.put((byte) section); 
+		request.put((byte) section);
 		
 		request.flip();
-		try { 	//send download request
+		
+		try {
 			client_ch.write(request);
-			System.out.println("Download request send" );
-			byte r = getResponse();
-			
-			if ( r == Config.RECEIVING_BYTES ) {
-				System.out.println("Received positive response, downloading file...");
-				ByteBuffer receive = ByteBuffer.allocate(Config.MAX_BUF_SIZE);
-				try {
-					client_ch.read(receive);
-					byte[] received_b = receive.array();
-					String file = new String(received_b, Config.DEFAULT_ENCODING);
-					System.out.println("File received successfully!");	
-					return file;
-				} catch (IOException io_ex) {
-					JOptionPane.showMessageDialog(mainFrame, io_ex.getMessage());
-				}
-			}
-			else if ( r == Config.NO_BYTES ) {
-				return new String("Empty");
-			}
-			else {
-				JOptionPane.showMessageDialog(mainFrame, Config.ERROR_LOG(r));
-				return null;
-			}
-
+			System.out.println("getFile invoked");
+			String file = getFile();
+			System.out.println("getFile returned");
+			return file;
 		} catch (IOException req_ex) {
 			JOptionPane.showMessageDialog(mainFrame, req_ex.getMessage());
 			return null;
 		}
-		return null;
 		
 	}
 	
+	/* Sends a request to download the selected document */
+	private static String downloadFile(String filename) throws UnsupportedEncodingException {
+		if (!serverOnline()) {
+			JOptionPane.showMessageDialog(mainFrame, "Server currently offline, try again later");
+			return null;
+		}
+		//TODO: implement downloadFile function
+		
+		return null;
+	}
+
+	private static String getFile() {
+		
+		ByteBuffer buffer = ByteBuffer.allocate(Config.BUF_SIZE);
+		ByteBuffer response = null;
+		
+		ByteArrayOutputStream byte_stream = new ByteArrayOutputStream();
+		byte[] r_bytes;
+		int total_read = 0;
+		try {
+			while (client_ch.read(buffer) > 0) {
+				System.out.println("getFile: reading...");
+				total_read += buffer.position();
+				int test = buffer.remaining();
+				System.out.println("getFile: total read " + total_read + "(bytes)");
+				buffer.flip();
+				r_bytes = buffer.array();
+				byte_stream.write(r_bytes);
+				buffer.clear();
+				if (test > 0) {
+					System.out.println("CHECKPOINT: no more bytes to read");
+					break;
+				}
+			}
+			System.out.println("getFile: all bytes read!");
+			if (total_read == 0) { // Some error occurred while reading from socket (e.g. server disconnected suddenly)
+				return null;
+			}
+			
+			byte[] response_bytes = byte_stream.toByteArray();
+			byte_stream.close();
+			response = ByteBuffer.allocate(response_bytes.length);
+			response.put(response_bytes);
+			response.flip();
+			
+			// extracting response message parts
+			byte outcome_code = response.get();
+			switch (outcome_code) {
+				case Config.IN_EDIT:
+					JOptionPane.showMessageDialog(mainFrame, "File currently unavailable");
+					return null;
+					
+				case Config.NO_BYTES: // File is empty, no bytes to read
+					String newFile = new String();
+					return newFile;
+					
+				case Config.RECEIVING_BYTES:
+					int file_size = response.get();
+					byte[] file_b = new byte[file_size];
+					response.get(file_b);
+					String file = new String(file_b, Config.DEFAULT_ENCODING);
+					return file;
+			}
+
+			
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+		return null;
+	}
+	
 	/* Sends the new file version to the server */
-	private static void endEditRequest(String filename, String text, int section) throws IOException { 
-		ByteBuffer request = ByteBuffer.allocate(Config.MAX_BUF_SIZE);
+	private static void updateSectionRequest(String filename, String text, int section) throws UnsupportedEncodingException { 
+		int capacity = (text.getBytes().length) +		// text length 		 (bytes)
+					   userName.getBytes().length + 	// username length 	 (bytes)
+					   filename.getBytes().length + 	// filename length 	 (bytes)
+					   (4 * Integer.SIZE) +				// int size for section_field
+					   1;								// request code byte
+					   
+		ByteBuffer request = ByteBuffer.allocate(capacity);
+		request.put(Config.SAVE_R); 											// request code
+		request.put((byte) userName.getBytes(Config.DEFAULT_ENCODING).length);	// username length
+		request.put((byte) filename.getBytes(Config.DEFAULT_ENCODING).length);	// filename length
+		request.putInt(text.getBytes(Config.DEFAULT_ENCODING).length);			// text length
+		request.put((byte) section);											// section index
+		request.put(userName.getBytes(Config.DEFAULT_ENCODING));				// username
+		request.put(filename.getBytes(Config.DEFAULT_ENCODING));				// filename
+		request.put(text.getBytes(Config.DEFAULT_ENCODING));					// text
+		
+		request.flip();
+		try { client_ch.write(request); } catch (IOException io_ex) { io_ex.printStackTrace(); }
+		
+	}
+
+	/* Sends a notification to the server to comunicate that given "section" of "filename" is now free */
+	private static void endEditRequest(String filename, int section) throws UnsupportedEncodingException {
+		ByteBuffer request = ByteBuffer.allocate(Config.BUF_SIZE);
 		request.put(Config.END_EDIT_R);
 		request.put((byte) userName.length());
 		request.put((byte) filename.length());
 		request.put((byte) section);
-		request.put((byte) text.length());
 		
 		request.put(userName.getBytes(Config.DEFAULT_ENCODING));
 		request.put(filename.getBytes(Config.DEFAULT_ENCODING));
-		request.put(text.getBytes(Config.DEFAULT_ENCODING));
 		
 		request.flip();
 		try {
@@ -955,8 +1181,8 @@ public class TuringClientUI {
 			JOptionPane.showMessageDialog(mainFrame, req_ex.getMessage());
 			return;
 		}
-		
 	}
+	
 	/************************************ UTILITY FUNCTIONS ***********************************************/
 	
 	/* Checks server status (used at the beginning of each request function */
@@ -974,7 +1200,7 @@ public class TuringClientUI {
 		return code;
 	}
 
-	/* Checks if the chosen <username, password> meet the requirements */
+	/* Checks if the chosen <username, password> meets the requirements */
 	private static boolean isValidUser(String username, char[] password) {
 
 		if (username.length() > 16 || username.length() < 5) {
@@ -990,7 +1216,8 @@ public class TuringClientUI {
 	
 	/* Enables online functionalities */
 	private static void enableOnlineService() {
-
+		
+		CLIENT_STATUS = Config.ONLINE;
 		mntmNew.setEnabled(true);
 		mntmList.setEnabled(true);
 		btnSend.setEnabled(true);
@@ -1002,6 +1229,7 @@ public class TuringClientUI {
 	/* Disables online functionalities */
 	private static void disableOnlineService() {
 		
+		CLIENT_STATUS = Config.OFFLINE;
 		mntmNew.setEnabled(false);
 		mntmList.setEnabled(false);
 		btnSend.setEnabled(false);
@@ -1026,4 +1254,42 @@ public class TuringClientUI {
 		message_box.setBackground(Color.GRAY);
 	}
 
+	/* Returns true if mouse points outside of the given region */
+	private static boolean pointsOutOfRegion(Rectangle region) {
+		int mouseX = MouseInfo.getPointerInfo().getLocation().x;
+		int mouseY = MouseInfo.getPointerInfo().getLocation().y;
+		if ( (mouseX >= region.getMinX() && mouseX <= region.getMaxX()) && 
+			(mouseY >= region.getMinY() && mouseY <= region.getMaxY()) )
+			return false;
+		
+		return true;
+	}
+	
+	/* Manages _Popup visibility relative to user mouse/window actions */
+	public static void armPopup(JPopupMenu _Popup) {
+	    if(_Popup != null) {
+	        Toolkit.getDefaultToolkit().addAWTEventListener(new AWTEventListener() {
+	            @Override
+	            public void eventDispatched(AWTEvent event) {
+
+	                if(event instanceof MouseEvent) {
+	                    MouseEvent m = (MouseEvent)event;
+	                    if(m.getID() == MouseEvent.MOUSE_CLICKED && pointsOutOfRegion(_Popup.getVisibleRect())){
+	                        _Popup.setVisible(false);
+	                        Toolkit.getDefaultToolkit().removeAWTEventListener(this);
+	                    }
+	                }
+	                if(event instanceof WindowEvent) {
+	                    WindowEvent we = (WindowEvent)event;
+	                    if(we.getID() == WindowEvent.WINDOW_DEACTIVATED || we.getID() == WindowEvent.WINDOW_STATE_CHANGED) {
+	                        _Popup.setVisible(false);
+	                        Toolkit.getDefaultToolkit().removeAWTEventListener(this);
+	                    }
+	                }
+	            }
+
+	        }, AWTEvent.MOUSE_EVENT_MASK | AWTEvent.WINDOW_EVENT_MASK);
+
+	    }
+	}
 }

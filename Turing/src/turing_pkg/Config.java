@@ -8,26 +8,26 @@ import java.util.Arrays;
 final class Config {
 	
 	/* common values */
-	public static final int MAX_BUF_SIZE 		 = 16384;		// default buffer size
-	public static final int REQ_BUF_SIZE		 = 128;			// request message size
-	public static final int HEADER_SIZE			 = 2;			// request header size
-	public static final int DATA_SIZE			 = 96;			// request data maximum size
+	public static final int BUF_SIZE		 	 = 1024;
 	public static final String SERVER_IP 	     = "localhost";
 	public static final int SERVER_PORT 		 = 2026;
 	public static final int REMOTE_SERVICE_PORT	 = 2027;
 	public static final String DEFAULT_ENCODING	 = "UTF-8";
-													//file storage path
+													//server file storage path
 	public static final String FILE_PATH 		 = "C:\\Users\\Pietro\\Desktop\\Progetto_Reti\\Code\\TuringDB\\"; 
+	public static final String TEMP_FOLDER		 = "C:\\Users\\Pietro\\Desktop\\Progetto_Reti\\Code\\TuringDB\\TEMP";
 	
 	/* request types codification */
-	public static final byte LOGIN_R	= (byte) 0;	// login request
-	public static final byte LOGOUT_R 	= (byte) 1;	// logout request
-	public static final byte NEW_R	 	= (byte) 2;	// create new document request
-	public static final byte EDIT_R		= (byte) 3; // edit an existing document request
-	public static final byte SHARE_R 	= (byte) 4;	// share document request
-	public static final byte LIST_R		= (byte) 6; // lists all proprietary/shared files
-	public static final byte DOWNLOAD_R = (byte) 7; // download file request
-	public static final byte END_EDIT_R	= (byte) 8; // sends new file version to server
+	public static final byte LOGIN_R		= (byte) 0;	// login request
+	public static final byte LOGOUT_R 		= (byte) 1;	// logout request
+	public static final byte NEW_R	 		= (byte) 2;	// create new document request
+	public static final byte EDIT_R			= (byte) 3; // edit an existing document request
+	public static final byte END_EDIT_R		= (byte) 4; // close editing section request
+	public static final byte SHARE_R 		= (byte) 5;	// share document request
+	public static final byte LIST_R			= (byte) 6; // lists all proprietary/shared files
+	public static final byte SHOW_R		 	= (byte) 7; // download section request
+	public static final byte SAVE_R			= (byte) 8; // save edited section request
+	
 		
 	/* errors and messages codification */
 	public static final byte SUCCESS 	 	= (byte) 0;
@@ -46,17 +46,26 @@ final class Config {
 	public static final byte CREATOR		= (byte) 0;
 	public static final byte SHARED			= (byte) 1;
 	
-	private Config () {}
+	/* file section status */
+	public static final byte FREE_SECTION	= (byte) 0;
+	public static final byte IN_EDIT		= (byte) 1;
 	
-	/* Converts a given ERROR CODE into a printable message that describes the error */
-	public static final String ERROR_LOG(byte ERROR_CODE) {
-		String log = new String();
+	/* CLIENT status codes */
+	public static final byte OFFLINE		= (byte) 0;
+	public static final byte ONLINE			= (byte) 1;
+	public static final byte EDITING		= (byte) 2;
+	
+	private Config () {}
+	 
+ 	/* Converts a given ERROR CODE into a printable message that describes the error */ 
+	public static final String ERROR_LOG(byte ERROR_CODE) {  
+		String log = new String(); 
 		
 		switch (ERROR_CODE) {
 			case INVALID_PASS:
 				log = "Invalid password";
 				break;
-			case ALREADY_ON:
+			case ALREADY_ON: 
 				log = "User already online";
 				break;
 			case UNKNOWN_USER:
@@ -91,7 +100,7 @@ final class Config {
 		
 		return result;
 	}
-	
+	 
 	/* byte[] to char[] conversion */
 	public static final char[] toChars (byte[] bytes) {
 		

@@ -32,7 +32,7 @@ public class User {
 		Iterator<Document> it = documents.iterator();
 		while (it.hasNext()) {
 			Document current = it.next();
-			if (current.title.equals(filename)) {
+			if (current.getTitle().equals(filename)) {
 				return current;
 			}
 		}

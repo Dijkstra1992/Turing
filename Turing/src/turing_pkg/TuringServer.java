@@ -90,7 +90,6 @@ public class TuringServer {
 							encode_ex.printStackTrace();
 						}
 						catch (IOException io_ex) {
-							System.out.println("CHECK_POINT_1(server routine)");
 							if (loggedUsers.containsValue(client)) {
 								disconnectClient(client);
 								System.out.println(client.getRemoteAddress() + " -> " + io_ex.getLocalizedMessage());
@@ -98,8 +97,6 @@ public class TuringServer {
 							client.close();
 							ready_key.cancel();
 						}
-						
-						System.out.println("CHECK_POINT_2(server routine)");
 					}									
 					
 					key_iterator.remove();
@@ -253,7 +250,7 @@ public class TuringServer {
 				}
 				break;
 				
-			/* client finished editing on given file section */
+			/* client finished editing on a file section */
 			case Config.END_EDIT_R:
 				user_s = buffer.get(); 
 				file_name_s = buffer.get();
@@ -270,9 +267,8 @@ public class TuringServer {
 				System.out.println("END_EDIT_R: " + user);
 				break;
 				
-			/* gets new file version from client and saves it */
+			/* gets new file version from client */
 			case Config.SAVE_R:
-				//TODO: implement downloadFile function
 				user_s = buffer.get();
 				file_name_s = buffer.get();
 				text_length = buffer.getInt();
@@ -324,11 +320,6 @@ public class TuringServer {
 		// user login
 		loggedUsers.put(username, client);
 		sendResponse(client, Config.SUCCESS); 
-	}
-
-	@SuppressWarnings("unused")
-	private static void logoutUser(String username) {
-		//TODO: implement function
 	}
 	
 	private static void newDocCreate(SocketChannel client, String username, String filename, int sections) {
@@ -433,43 +424,28 @@ public class TuringServer {
 		
 		if ( section_number == -1) text = getFile(doc.getOwner(), filename);  // retrieves entire document
 		else text = getFileSection(doc.getOwner(), filename, section_number); // retrieves only a section (the requested one)
-		if (text.length() > 0) { // non empty file
-			try {
-				System.out.println("Sending following text file: ");
-				System.out.println(text);
-				System.out.println("********************************");
-				byte[] text_b = text.getBytes(Config.DEFAULT_ENCODING);
-				int text_size = text_b.length;
-				ByteBuffer send = ByteBuffer.allocate(text_size + 1 + Integer.SIZE);
-				send.put(Config.RECEIVING_BYTES);
-				send.putInt(text_size);
-				send.put(text_b);
-				send.flip();
-				try {
-					client.write(send);
-					System.out.println("File " + filename + " sent to user " + username + ", total bytes: " + text_size);
-				} catch (IOException io_ex) {
-					io_ex.printStackTrace();
-				}
-			} catch (UnsupportedEncodingException e) {
-				e.printStackTrace();
-			}
-			
-		}
-		else { // blank file
-			ByteBuffer send = ByteBuffer.allocate(1);
-			send.put(Config.NO_BYTES);
+		
+		try {
+			System.out.println(text);
+			byte[] text_b = text.getBytes(Config.DEFAULT_ENCODING);
+			int text_size = text_b.length;
+			ByteBuffer send = ByteBuffer.allocate(text_size + Integer.SIZE);
+			send.putInt(text_size);
+			send.put(text_b);
 			send.flip();
 			try {
 				client.write(send);
+				System.out.println("File data send, total bytes written: " + text_size + 1);
 			} catch (IOException io_ex) {
 				io_ex.printStackTrace();
 			}
+		} catch (UnsupportedEncodingException e) {
+			e.printStackTrace();
 		}
 	}
 	
 	private static void updateFile(SocketChannel client, String username, String filename, byte[] file_text, int section) {
-		//TODO: SAVE_R needs downloadFile function
+
 		User user = usersDB.get(username);
 		Document document = user.getFile(filename);
 		String owner = new String(document.getOwner());
@@ -482,7 +458,10 @@ public class TuringServer {
 		} catch (IOException io_ex) {
 			io_ex.printStackTrace();
 			sendResponse(client, Config.UNKNOWN_ERROR);
+			System.out.println("*************check_1*************");
+			return;
 		}
+		System.out.println("*************check_2*************");
 		sendResponse(client, Config.SUCCESS);
 	}
 	

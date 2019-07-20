@@ -22,7 +22,6 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -740,8 +739,7 @@ public class TuringClientUI {
 				try {
 					String text = new String(textArea.getText());
 					updateSectionRequest(filename, text, section);
-					byte r;
-					r = getResponse();
+					byte r = getResponse();
 					if ( r != Config.SUCCESS) { // saving file failed
 						JOptionPane.showMessageDialog(dialog, "Error saving file: " + Config.ERROR_LOG(r));
 					}
@@ -1034,7 +1032,7 @@ public class TuringClientUI {
 		}
 	}
 	
-	/* Sends a request to download the selected file section */
+	/* Sends a request to download the selected file section and returns the downloaded file to the calling component */
 	private static String downloadSection(String filename, int section, byte mode) throws UnsupportedEncodingException {
 		
 		if (!serverOnline()) {
@@ -1057,9 +1055,8 @@ public class TuringClientUI {
 		
 		try {
 			client_ch.write(request);
-			System.out.println("getFile invoked");
-			String file = getFile();
-			System.out.println("getFile returned");
+			System.out.println("getFile() invoked");
+			String file = getFile(); 
 			return file;
 		} catch (IOException req_ex) {
 			JOptionPane.showMessageDialog(mainFrame, req_ex.getMessage());
@@ -1068,76 +1065,59 @@ public class TuringClientUI {
 		
 	}
 	
-	/* Sends a request to download the selected document */
+	/* Sends a request to download the selected document and returns the downloaded file to the calling component */
 	private static String downloadFile(String filename) throws UnsupportedEncodingException {
 		if (!serverOnline()) {
 			JOptionPane.showMessageDialog(mainFrame, "Server currently offline, try again later");
 			return null;
 		}
-		//TODO: implement downloadFile function
 		
 		return null;
 	}
 
-	private static String getFile() {
+	/* Downloads a file from the server */
+	private static String getFile() throws IOException {
 		
 		ByteBuffer buffer = ByteBuffer.allocate(Config.BUF_SIZE);
-		ByteBuffer response = null;
-		
+		ByteBuffer data;
 		ByteArrayOutputStream byte_stream = new ByteArrayOutputStream();
 		byte[] r_bytes;
-		int total_read = 0;
-		try {
-			while (client_ch.read(buffer) > 0) {
-				System.out.println("getFile: reading...");
-				total_read += buffer.position();
-				int test = buffer.remaining();
-				System.out.println("getFile: total read " + total_read + "(bytes)");
-				buffer.flip();
-				r_bytes = buffer.array();
-				byte_stream.write(r_bytes);
-				buffer.clear();
-				if (test > 0) {
-					System.out.println("CHECKPOINT: no more bytes to read");
-					break;
-				}
-			}
-			System.out.println("getFile: all bytes read!");
-			if (total_read == 0) { // Some error occurred while reading from socket (e.g. server disconnected suddenly)
-				return null;
-			}
-			
-			byte[] response_bytes = byte_stream.toByteArray();
-			byte_stream.close();
-			response = ByteBuffer.allocate(response_bytes.length);
-			response.put(response_bytes);
-			response.flip();
-			
-			// extracting response message parts
-			byte outcome_code = response.get();
-			switch (outcome_code) {
-				case Config.IN_EDIT:
-					JOptionPane.showMessageDialog(mainFrame, "File currently unavailable");
-					return null;
-					
-				case Config.NO_BYTES: // File is empty, no bytes to read
-					String newFile = new String();
-					return newFile;
-					
-				case Config.RECEIVING_BYTES:
-					int file_size = response.get();
-					byte[] file_b = new byte[file_size];
-					response.get(file_b);
-					String file = new String(file_b, Config.DEFAULT_ENCODING);
-					return file;
-			}
-
-			
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+		int received_bytes = 0;
+		byte[] b_data;
+		int text_size;
+		byte[] text;
+		String file;
 		
-		return null;
+		System.out.println("Start reading file data");
+		client_ch.configureBlocking(false);
+		while (client_ch.read(buffer) <= 0) {
+			System.out.println("nothing to read yet...");
+		}
+		do {
+			buffer.flip();
+			r_bytes = buffer.array();
+			byte_stream.write(r_bytes);
+			buffer.clear();
+		} while (client_ch.read(buffer) > 0);
+		
+		
+		received_bytes = byte_stream.size();
+		b_data = new byte[received_bytes];
+		data = ByteBuffer.allocate(received_bytes);
+		
+		b_data = byte_stream.toByteArray();
+		data.put(b_data);
+		data.flip();
+		byte_stream.close();
+		
+		System.out.println("Received " + data.position() + " bytes");
+		
+		text_size = data.getInt();
+		text = new byte[text_size];
+		data.get(text, 0, text_size);
+		file = new String(text, Config.DEFAULT_ENCODING);
+		return file;
+		
 	}
 	
 	/* Sends the new file version to the server */
@@ -1194,10 +1174,11 @@ public class TuringClientUI {
 	/* Waits to receive a response code from the server for the current request */
 	private static byte getResponse() throws IOException {
 		ByteBuffer response = ByteBuffer.allocate(1);		
-		client_ch.read(response);	
+		while(client_ch.read(response) <= 0) {
+		}
 		response.flip();
-		byte code = response.get();
-		return code;
+		byte r_code = response.get();
+		return r_code;		
 	}
 
 	/* Checks if the chosen <username, password> meets the requirements */

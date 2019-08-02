@@ -36,7 +36,8 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.StringTokenizer;
-/* Swing framework libraries */
+
+/* Swing framework imports */
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -63,6 +64,13 @@ import javax.swing.border.EmptyBorder;
 
 public class TuringClientUI {
 
+	private static SocketChannel client_ch = null; 
+	private static String userName;
+	private static Map<String, Integer> documents;
+	private static Registry turing_services;
+	private static TuringRemoteService remoteOBJ;
+	private static byte CLIENT_STATUS;
+	
 	/* UI components */
 	private static JFrame mainFrame;
 	private static JPanel panel;
@@ -88,15 +96,6 @@ public class TuringClientUI {
 	private static JMenuItem mntmShow;
 	private static JMenuItem mntmShare;
 	
-	/* Global variables and constants */
-	private static SocketChannel client_ch = null; 
-	private static String userName;
-	private static Map<String, Integer> documents;
-	private static Registry turing_services;
-	private static TuringRemoteService remoteOBJ;
-	private static byte CLIENT_STATUS;
-	
-	
 	/****************************
 	 * Launch the application.
 	 ***************************/
@@ -106,8 +105,7 @@ public class TuringClientUI {
 				documents = new HashMap<String, Integer>();
 				try {
 					UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); 
-					@SuppressWarnings("unused")
-					TuringClientUI window = new TuringClientUI();
+					initialize();
 					CLIENT_STATUS = Config.OFFLINE;
 					mainFrame.setVisible(true);  
 				} catch (Exception e) {
@@ -117,17 +115,10 @@ public class TuringClientUI {
 		});
 	}
 
-	/******************************
-	 * Create the application.
-	 *****************************/
-	public TuringClientUI() {
-		initialize();
-	}
-
 	/*******************************************
-	 * Initialize the contents of the frame
+	 * Initialize GUI
 	 *******************************************/
-	private void initialize() {		
+	private static void initialize() {		
 		mainFrame = new JFrame("TURING");
 		mainFrame.setBounds(100, 100, 800, 600);
 		mainFrame.setResizable(false);
@@ -749,8 +740,11 @@ public class TuringClientUI {
 						JOptionPane.YES_NO_OPTION,
 						JOptionPane.WARNING_MESSAGE);
 				if ( confirm == JOptionPane.YES_OPTION ) {
-					try {endEditRequest(filename, section); } catch (UnsupportedEncodingException ue) {ue.printStackTrace();}
+					try {
+						endEditRequest(filename, section);
+					} catch (UnsupportedEncodingException ue) {ue.printStackTrace();}
 					dialog.dispose();
+					CLIENT_STATUS = Config.ONLINE;
 				}
 			}
 		});		
@@ -820,6 +814,7 @@ public class TuringClientUI {
 						System.out.println("Editor instance created...");
 						editor.setLocation(mainFrame.getX() + mainFrame.getWidth(), mainFrame.getY());
 						editor.setVisible(true);
+						CLIENT_STATUS = Config.EDITING;
 						enableChat();
 					} 
 					popupMenu.setVisible(false);	
@@ -1177,24 +1172,30 @@ public class TuringClientUI {
 	
 	/* Sends the new file version to the server */
 	private static void updateSectionRequest(String filename, String text, int section) throws UnsupportedEncodingException { 
-		int capacity = (text.getBytes().length) +		// text length 		 (bytes)
-					   userName.getBytes().length + 	// username length 	 (bytes)
-					   filename.getBytes().length + 	// filename length 	 (bytes)
-					   (4 * Integer.SIZE) +				// int size for section_field
-					   1;								// request code byte
-					   
-		ByteBuffer request = ByteBuffer.allocate(capacity);
-		request.put(Config.SAVE_R); 											// request code
-		request.put((byte) userName.getBytes(Config.DEFAULT_ENCODING).length);	// username length
-		request.put((byte) filename.getBytes(Config.DEFAULT_ENCODING).length);	// filename length
-		request.putInt(text.getBytes(Config.DEFAULT_ENCODING).length);			// text length
-		request.put((byte) section);											// section index
-		request.put(userName.getBytes(Config.DEFAULT_ENCODING));				// username
-		request.put(filename.getBytes(Config.DEFAULT_ENCODING));				// filename
-		request.put(text.getBytes(Config.DEFAULT_ENCODING));					// text
 		
-		request.flip();
-		try { client_ch.write(request); } catch (IOException io_ex) { io_ex.printStackTrace(); }
+		int capacity = (text.getBytes(Config.DEFAULT_ENCODING).length) +		
+					   userName.getBytes(Config.DEFAULT_ENCODING).length + 		
+					   filename.getBytes(Config.DEFAULT_ENCODING).length + 		
+					   (Integer.SIZE) +											
+					   1;														
+		
+		System.out.println("Total size needed: " + capacity + " bytes");
+		ByteBuffer request = ByteBuffer.allocate(capacity);
+		try {
+			
+			request.put(Config.SAVE_R); 											// request code
+			request.put((byte) userName.getBytes(Config.DEFAULT_ENCODING).length);	// username length
+			request.put((byte) filename.getBytes(Config.DEFAULT_ENCODING).length);	// filename length
+			request.putInt(text.getBytes(Config.DEFAULT_ENCODING).length);			// text length
+			request.put((byte) section);											// section index
+			request.put(userName.getBytes(Config.DEFAULT_ENCODING));				// username
+			request.put(filename.getBytes(Config.DEFAULT_ENCODING));				// filename
+			request.put(text.getBytes(Config.DEFAULT_ENCODING));					// text
+			
+			request.flip();
+			client_ch.write(request);
+		}
+		catch (IOException io_ex) { io_ex.printStackTrace(); }
 		
 	}
 
@@ -1276,6 +1277,7 @@ public class TuringClientUI {
 	
 	/* Enables chat service for current file work-group */
 	private static void enableChat() {
+		//TODO: start ChatManager thread
 		chat_history.setEnabled(true);
 		message_box.setEnabled(true);
 		chat_history.setBackground(Color.WHITE);

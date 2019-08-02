@@ -30,7 +30,9 @@ import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.StringTokenizer;
@@ -100,14 +102,14 @@ public class TuringClientUI {
 	 ***************************/
 	public static void main(String[] args) {
 		EventQueue.invokeLater(new Runnable() {
-			@SuppressWarnings("static-access")
 			public void run() {
 				documents = new HashMap<String, Integer>();
 				try {
 					UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); 
+					@SuppressWarnings("unused")
 					TuringClientUI window = new TuringClientUI();
 					CLIENT_STATUS = Config.OFFLINE;
-					window.mainFrame.setVisible(true);  
+					mainFrame.setVisible(true);  
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -142,9 +144,13 @@ public class TuringClientUI {
 							JOptionPane.WARNING_MESSAGE);
 					if ( selection == JOptionPane.YES_OPTION ) {
 						mainFrame.dispose();
+						return;
 					}
 				}
-				else mainFrame.dispose();
+				else {
+					mainFrame.dispose();
+					return;
+				}
 			}
 		});
 		
@@ -251,11 +257,13 @@ public class TuringClientUI {
 	 ************************/
 	private static void registerActionPerformed() {
 		JDialog regDialog = registerDialog();
+		regDialog.setLocationRelativeTo(mainFrame);
 		regDialog.setVisible(true);
 	}
 
 	private static void loginActionPerformed() {
 		JDialog logDialog = loginDialog();
+		logDialog.setLocationRelativeTo(mainFrame);
 		logDialog.setVisible(true);
 	}
 	
@@ -269,16 +277,37 @@ public class TuringClientUI {
 	
 	private static void newdocActionPerformed() {
 		JDialog docDialog = newDocDialog();
+		docDialog.setLocationRelativeTo(mainFrame);
 		docDialog.setVisible(true);
 	}
 
 	private static void listActionPerformed() {
-		JDialog listDialog = fileExplorer();
-		if (listDialog != null) listDialog.setVisible(true);
+		ArrayList<String> rcv_files = null;
+		try {
+			rcv_files = listDocsRequest();
+		} catch (IOException req_ex) {
+			JOptionPane.showMessageDialog(mainFrame, "Error retrieving file list", "ERROR", JOptionPane.ERROR_MESSAGE);
+		}
+		if (rcv_files != null) {
+			JDialog listDialog = fileExplorer();
+			Iterator<String> f_iter = rcv_files.iterator();
+			while (f_iter.hasNext()) {
+				String current_file = (String) f_iter.next();
+				int current_sect_n = Integer.parseInt((String) f_iter.next(), 10);
+				list.addElement(current_file);
+				if (!documents.containsKey(current_file)) { //adding file to client's local documents list if needed
+					documents.put(current_file, current_sect_n);
+				}
+			}
+			listDialog.setLocationRelativeTo(mainFrame);
+			listDialog.setVisible(true);
+			mntmList.setEnabled(false);
+		}
 	}
 	
 	private static void shareActionPerformed(String filename) {
 		JDialog shareDialog = shareDocDialog(filename);
+		shareDialog.setLocationRelativeTo(mainFrame);
 		shareDialog.setVisible(true);
 	}
 	
@@ -451,6 +480,7 @@ public class TuringClientUI {
 				InetSocketAddress server_address = new InetSocketAddress(Config.SERVER_IP, Config.SERVER_PORT);
 				try {
 					client_ch = SocketChannel.open(server_address);
+					client_ch.configureBlocking(false);
 					loginRequest(username, password);
 					byte r;
 					if ( (r=getResponse()) == Config.SUCCESS ) {
@@ -603,6 +633,15 @@ public class TuringClientUI {
 		JDialog dialog = new JDialog(mainFrame, "My files");
 		JPanel panel = new JPanel();
 		
+		dialog.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+		dialog.addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(WindowEvent e) {
+				mntmList.setEnabled(true);
+				dialog.dispose();
+			}
+		});
+		
 		mntmEdit = new JMenuItem("Edit section");
 		mntmShowSection = new JMenuItem("Show section");
 		mntmShow = new JMenuItem("Show document");
@@ -684,17 +723,11 @@ public class TuringClientUI {
 				catch (IOException ex) {ex.printStackTrace();}
 			}
 		});
-		
+				
 		panel.add(exp_scroll);
 		dialog.add(panel);
-		boolean res = false;
-		try {
-			res = listDocsRequest();
-		} catch (IOException req_ex) {
-			JOptionPane.showMessageDialog(mainFrame, "Error retrieving file list", "ERROR", JOptionPane.ERROR_MESSAGE);
-		}
-		if (res) return dialog;
-		return null;
+		
+		return dialog;
 	}
 	
 	private static JDialog fileEditor(String filename, String text, int section) {
@@ -780,7 +813,6 @@ public class TuringClientUI {
 				int s = s_lister.getSelectedIndex(); 
 				String text;
 				try {
-					System.out.println("downloadSection invoked");
 					text = downloadSection(filename, s, Config.EDIT_R);
 					if (text != null) {
 						System.out.println("File downloaded, " + text.getBytes().length);
@@ -808,7 +840,8 @@ public class TuringClientUI {
 		panel.add(s_lister);
 		panel.add(btnEdit);
 		panel.add(btnCancel);
-		
+		Object preventHide = s_lister.getClientProperty("doNotCancelPopup");
+		popupMenu.putClientProperty("doNotCancelPopup", preventHide);
 		popupMenu.add(panel);
 		
 		return popupMenu;
@@ -952,13 +985,12 @@ public class TuringClientUI {
 	}
 	
 	/* Sends a request to the server to receive the list of proprietary and shared files */
-	private static boolean listDocsRequest() throws UnsupportedEncodingException {
-		
+	private static ArrayList<String> listDocsRequest() throws UnsupportedEncodingException {
 		if (!serverOnline()) {
-			JOptionPane.showMessageDialog(mainFrame, "Server currently offline, try again later");
-			return false;
-		}
-		
+		JOptionPane.showMessageDialog(mainFrame, "Server currently offline, try again later");
+		return null;
+	}
+	
 		ByteBuffer buffer = ByteBuffer.allocate(Config.BUF_SIZE);
 		byte name_size = (byte) userName.length();
 		
@@ -973,7 +1005,7 @@ public class TuringClientUI {
 			byte r;
 			if ( (r = getResponse()) != Config.SUCCESS ) { // file list retrievement failed
 				JOptionPane.showMessageDialog(mainFrame, Config.ERROR_LOG(r));
-				return false;
+				return null;
 			}
 			else { // receiving file list
 				buffer.clear();
@@ -981,25 +1013,22 @@ public class TuringClientUI {
 				buffer.flip();
 				byte[] files_list = buffer.array();
 				String files = new String(files_list, Config.DEFAULT_ENCODING);
-				System.out.println("Received file list: " + files);
 				StringTokenizer s_tok = new StringTokenizer(files, "-");
+				ArrayList<String> received_files = new ArrayList<String>();
 				while (s_tok.hasMoreTokens()) {
 					try { 
 						String current_file = new String(s_tok.nextToken());
 						String current_sect = new String(s_tok.nextToken());
-						System.out.println(current_file + ", " + current_sect); 
-						int sections = Integer.parseInt(current_sect, 10);
-						list.addElement(current_file); //adding filename to file explorer list
-						if (!documents.containsKey(current_file)) { //adding file to client's local documents list if needed
-							documents.put(current_file, sections);
-						}
+						received_files.add(current_file);
+						received_files.add(current_sect);
 					} catch (NoSuchElementException end_ex) {} // last element is just a delimiter token	
 				}
+				return received_files;
 			}
 		} catch (IOException req_ex) {
 			JOptionPane.showMessageDialog(mainFrame, req_ex.getMessage());
 		}
-		return true;
+		return null;
 	}
 	
 	/* Sends a request to share a given file with a destinatary user */
@@ -1044,7 +1073,7 @@ public class TuringClientUI {
 		byte name_size = (byte) userName.length();
 		byte fname_size = (byte) filename.length();
 		
-		request.put(Config.EDIT_R);
+		request.put(mode);
 		request.put(name_size);
 		request.put(fname_size);
 		request.put(userName.getBytes(Config.DEFAULT_ENCODING));
@@ -1055,7 +1084,6 @@ public class TuringClientUI {
 		
 		try {
 			client_ch.write(request);
-			System.out.println("getFile() invoked");
 			String file = getFile(); 
 			return file;
 		} catch (IOException req_ex) {
@@ -1072,7 +1100,28 @@ public class TuringClientUI {
 			return null;
 		}
 		
-		return null;
+		ByteBuffer request = ByteBuffer.allocate(Config.BUF_SIZE);
+		byte name_size = (byte) userName.length();
+		byte fname_size = (byte) filename.length();
+		
+		request.put(Config.SHOW_R);
+		request.put(name_size);
+		request.put(fname_size);
+		request.put(userName.getBytes(Config.DEFAULT_ENCODING));
+		request.put(filename.getBytes(Config.DEFAULT_ENCODING));
+		request.put((byte) -1);
+		
+		request.flip();
+		
+		try {
+			client_ch.write(request);
+			String file = getFile(); 
+			return file;
+		} catch (IOException req_ex) {
+			JOptionPane.showMessageDialog(mainFrame, req_ex.getMessage());
+			return null;
+		}
+
 	}
 
 	/* Downloads a file from the server */
@@ -1087,13 +1136,11 @@ public class TuringClientUI {
 		int text_size;
 		byte[] text;
 		String file;
+		byte r_code;
 		
-		System.out.println("Start reading file data");
-		client_ch.configureBlocking(false);
 		while (client_ch.read(buffer) <= 0) {
-			System.out.println("nothing to read yet...");
 		}
-		do {
+		do { // reads incoming byte from channel, and puts them into a local bytestream array
 			buffer.flip();
 			r_bytes = buffer.array();
 			byte_stream.write(r_bytes);
@@ -1112,12 +1159,20 @@ public class TuringClientUI {
 		
 		System.out.println("Received " + data.position() + " bytes");
 		
-		text_size = data.getInt();
-		text = new byte[text_size];
-		data.get(text, 0, text_size);
-		file = new String(text, Config.DEFAULT_ENCODING);
-		return file;
-		
+		r_code = data.get();
+		if (r_code == Config.IN_EDIT) {
+			byte[] editing_user_b = new byte[data.remaining()];
+			data.get(editing_user_b, 0, data.remaining());
+			String editing_user = new String(editing_user_b, Config.DEFAULT_ENCODING);
+			JOptionPane.showMessageDialog(mainFrame, "File currently in edit by user: " + editing_user);
+			return null;
+		} else {
+			text_size = data.getInt();
+			text = new byte[text_size];
+			data.get(text, 0, text_size);
+			file = new String(text, Config.DEFAULT_ENCODING);
+			return file;
+		}
 	}
 	
 	/* Sends the new file version to the server */

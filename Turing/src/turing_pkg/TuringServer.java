@@ -31,6 +31,7 @@ public class TuringServer {
 	/* Users database structure */ 
 	public static Map<String, User> usersDB; 	 			// registered users
 	private static Map<String, SocketChannel> loggedUsers;	// online users
+	private static Map<String, String> openDocuments;		// list of currently open documents for editing
 	private static ServerSocketChannel server_ch = null;
 	private static Selector ch_selector = null;
 	
@@ -50,6 +51,7 @@ public class TuringServer {
 		/* Data structures initialization */
 		usersDB = new HashMap<String, User>();
 		loggedUsers = new HashMap<String, SocketChannel>(); 
+		openDocuments = new HashMap<String, String>();
 		
 		/* exports remote registration service */
 		TuringRemoteRegisterOP remote_service = new TuringRemoteRegisterOP();
@@ -142,8 +144,9 @@ public class TuringServer {
 		Document currentDoc;
 		
 		r_type = buffer.get(); // reads request type code
-		/* processing client requests */
+		/* processing client request */
 		switch (r_type) {
+		
 			/* login request */
 			case Config.LOGIN_R :
 				user_s = buffer.get();
@@ -242,10 +245,19 @@ public class TuringServer {
 				currentDoc = currentUser.getFile(file);
 				System.out.println("EDIT_R: " + user);
 				if (currentDoc.getStatus(section) == Config.IN_EDIT) {
-					sendResponse(client, Config.IN_EDIT);
-				}
+					ByteBuffer response = ByteBuffer.allocate(Config.BUF_SIZE);
+					response.put(Config.IN_EDIT);
+					response.put(openDocuments.get(file).getBytes(Config.DEFAULT_ENCODING));
+					response.flip();
+					try {
+						client.write(response);
+					} catch (IOException io_ex) {
+						io_ex.printStackTrace();
+					}
+				} 
 				else {
 					currentDoc.setStatus(Config.IN_EDIT, section);
+					openDocuments.put(file, user);
 					sendFile(client, user, file, section);
 				}
 				break;
@@ -374,11 +386,11 @@ public class TuringServer {
 				data_fn = temp.getTitle().getBytes(Config.DEFAULT_ENCODING);
 				int s = temp.getSectionCount();
 				byte[] sb = Integer.toString(s).getBytes();
-				buffer.put("-".getBytes(Config.DEFAULT_ENCODING)); // delimiter
-				buffer.put(data_fn);							   // file name
-				buffer.put("-".getBytes(Config.DEFAULT_ENCODING)); // delimiter
-				buffer.put(sb);									   // sections number
-				buffer.put("-".getBytes(Config.DEFAULT_ENCODING)); // delimiter
+				buffer.put("-".getBytes(Config.DEFAULT_ENCODING)); 
+				buffer.put(data_fn);							   
+				buffer.put("-".getBytes(Config.DEFAULT_ENCODING)); 
+				buffer.put(sb);									   
+				buffer.put("-".getBytes(Config.DEFAULT_ENCODING)); 
 			}
 			buffer.flip();
 			client.write(buffer);
@@ -430,6 +442,7 @@ public class TuringServer {
 			byte[] text_b = text.getBytes(Config.DEFAULT_ENCODING);
 			int text_size = text_b.length;
 			ByteBuffer send = ByteBuffer.allocate(text_size + Integer.SIZE);
+			send.put(Config.SUCCESS);
 			send.putInt(text_size);
 			send.put(text_b);
 			send.flip();

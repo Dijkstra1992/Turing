@@ -7,11 +7,12 @@ import java.util.Arrays;
 
 final class Config {
 	
-	/* common values */
-	public static final int BUF_SIZE		 	 = 1024;
+	/* configuration values */
+	public static final int BUF_SIZE		 	 = 4096;
 	public static final String SERVER_IP 	     = "localhost";
 	public static final int SERVER_PORT 		 = 2026;
 	public static final int REMOTE_SERVICE_PORT	 = 2027;
+	public static final int CHAT_SERVICE_PORT	 = 2028;
 	public static final String DEFAULT_ENCODING	 = "UTF-8";
 													//server file storage path
 	public static final String FILE_PATH 		 = "C:\\Users\\Pietro\\Desktop\\Progetto_Reti\\Code\\TuringDB\\"; 
@@ -65,7 +66,7 @@ final class Config {
 			case INVALID_PASS:
 				log = "Invalid password";
 				break;
-			case ALREADY_ON: 
+			case ALREADY_ON:  
 				log = "User already online";
 				break;
 			case UNKNOWN_USER:

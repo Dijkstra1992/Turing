@@ -23,6 +23,9 @@ import java.awt.event.WindowEvent;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
@@ -37,7 +40,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.StringTokenizer;
 
-/* Swing framework imports */
+/* Swing framework API's */
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -491,7 +494,7 @@ public class TuringClientUI {
 					JOptionPane.showMessageDialog(
 							mainFrame, 
 							"Unable to reach the server, try again later", 
-							"COM_ERROR", 
+							"CONNECTION_ERROR", 
 							JOptionPane.ERROR_MESSAGE);
 				} 
 			}
@@ -699,7 +702,7 @@ public class TuringClientUI {
 			public void actionPerformed(ActionEvent evt) {
 				String selected_file = new String(file_explorer.getSelectedValue());
 				try {
-					String text = downloadFile(selected_file);
+					String text = downloadRequest(selected_file, -1, Config.SHOW_R);
 					System.out.println("Received text: " + text);
 					JDialog viewer = new JDialog();
 					JTextArea textArea = new JTextArea();
@@ -807,7 +810,7 @@ public class TuringClientUI {
 				int s = s_lister.getSelectedIndex(); 
 				String text;
 				try {
-					text = downloadSection(filename, s, Config.EDIT_R);
+					text = downloadRequest(filename, s, Config.EDIT_R);
 					if (text != null) {
 						System.out.println("File downloaded, " + text.getBytes().length);
 						JDialog editor = fileEditor(filename, text, s);
@@ -855,10 +858,10 @@ public class TuringClientUI {
 		
 		btnShow.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
-				int s = s_lister.getSelectedIndex(); 
+				byte s = (byte) s_lister.getSelectedIndex(); 
 				String text;
 				try {
-					text = downloadSection(filename, s, Config.SHOW_R);
+					text = downloadRequest(filename, s, Config.SHOW_R);
 					if (text == null) {
 						JOptionPane.showMessageDialog(file_explorer, "Error retrieving selected file");
 					} else {
@@ -965,7 +968,7 @@ public class TuringClientUI {
 		request.put(Config.NEW_R);
 		request.put((byte) userName.length());
 		request.put((byte) filename.length());
-		request.put((byte) sections);
+		request.putInt(sections);
 		
 		request.put(userName.getBytes(Config.DEFAULT_ENCODING));
 		request.put(filename.getBytes(Config.DEFAULT_ENCODING));
@@ -1057,7 +1060,7 @@ public class TuringClientUI {
 	}
 	
 	/* Sends a request to download the selected file section and returns the downloaded file to the calling component */
-	private static String downloadSection(String filename, int section, byte mode) throws UnsupportedEncodingException {
+	private static String downloadRequest(String filename, int section, byte mode) throws UnsupportedEncodingException {
 		
 		if (!serverOnline()) {
 			JOptionPane.showMessageDialog(mainFrame, "Server currently offline, try again later");
@@ -1073,54 +1076,23 @@ public class TuringClientUI {
 		request.put(fname_size);
 		request.put(userName.getBytes(Config.DEFAULT_ENCODING));
 		request.put(filename.getBytes(Config.DEFAULT_ENCODING));
-		request.put((byte) section);
+		request.putInt(section);
 		
 		request.flip();
 		
 		try {
 			client_ch.write(request);
-			String file = getFile(); 
+			String file = downloadFile(); 
 			return file;
 		} catch (IOException req_ex) {
 			JOptionPane.showMessageDialog(mainFrame, req_ex.getMessage());
 			return null;
 		}
 		
-	}
-	
-	/* Sends a request to download the selected document and returns the downloaded file to the calling component */
-	private static String downloadFile(String filename) throws UnsupportedEncodingException {
-		if (!serverOnline()) {
-			JOptionPane.showMessageDialog(mainFrame, "Server currently offline, try again later");
-			return null;
-		}
-		
-		ByteBuffer request = ByteBuffer.allocate(Config.BUF_SIZE);
-		byte name_size = (byte) userName.length();
-		byte fname_size = (byte) filename.length();
-		
-		request.put(Config.SHOW_R);
-		request.put(name_size);
-		request.put(fname_size);
-		request.put(userName.getBytes(Config.DEFAULT_ENCODING));
-		request.put(filename.getBytes(Config.DEFAULT_ENCODING));
-		request.put((byte) -1);
-		
-		request.flip();
-		
-		try {
-			client_ch.write(request);
-			String file = getFile(); 
-			return file;
-		} catch (IOException req_ex) {
-			JOptionPane.showMessageDialog(mainFrame, req_ex.getMessage());
-			return null;
-		}
-
 	}
 
 	/* Downloads a file from the server */
-	private static String getFile() throws IOException {
+	private static String downloadFile() throws IOException {
 		
 		ByteBuffer buffer = ByteBuffer.allocate(Config.BUF_SIZE);
 		ByteBuffer data;
@@ -1176,7 +1148,7 @@ public class TuringClientUI {
 		int capacity = (text.getBytes(Config.DEFAULT_ENCODING).length) +		
 					   userName.getBytes(Config.DEFAULT_ENCODING).length + 		
 					   filename.getBytes(Config.DEFAULT_ENCODING).length + 		
-					   (Integer.SIZE) +											
+					   2 * (Integer.SIZE) +											
 					   1;														
 		
 		System.out.println("Total size needed: " + capacity + " bytes");
@@ -1187,7 +1159,7 @@ public class TuringClientUI {
 			request.put((byte) userName.getBytes(Config.DEFAULT_ENCODING).length);	// username length
 			request.put((byte) filename.getBytes(Config.DEFAULT_ENCODING).length);	// filename length
 			request.putInt(text.getBytes(Config.DEFAULT_ENCODING).length);			// text length
-			request.put((byte) section);											// section index
+			request.putInt(section);												// section index
 			request.put(userName.getBytes(Config.DEFAULT_ENCODING));				// username
 			request.put(filename.getBytes(Config.DEFAULT_ENCODING));				// filename
 			request.put(text.getBytes(Config.DEFAULT_ENCODING));					// text
@@ -1205,7 +1177,7 @@ public class TuringClientUI {
 		request.put(Config.END_EDIT_R);
 		request.put((byte) userName.length());
 		request.put((byte) filename.length());
-		request.put((byte) section);
+		request.putInt(section);
 		
 		request.put(userName.getBytes(Config.DEFAULT_ENCODING));
 		request.put(filename.getBytes(Config.DEFAULT_ENCODING));

@@ -19,7 +19,7 @@ public class User {
 	public String getName() {
 		return this.username;
 	}
-	
+	 
 	public char[] getPass() {
 		return this.password;
 	}
@@ -28,7 +28,7 @@ public class User {
 		documents.add(file);
 	}
 	
-	public Document getFile(String filename) {
+	public Document getDocument(String filename) {
 		Iterator<Document> it = documents.iterator();
 		while (it.hasNext()) {
 			Document current = it.next();

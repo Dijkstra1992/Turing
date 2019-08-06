@@ -31,7 +31,7 @@ public class TuringServer {
 	/* Users database structure */ 
 	public static Map<String, User> usersDB; 	 			// registered users
 	private static Map<String, SocketChannel> loggedUsers;	// online users
-	private static Map<String, String> openDocuments;		// list of currently open documents for editing
+	private static Map<String, String> openDocuments;		// list of currently open sections for editing
 	private static ServerSocketChannel server_ch = null;
 	private static Selector ch_selector = null;
 	
@@ -137,8 +137,8 @@ public class TuringServer {
 
 		byte r_type, user_s, pass_s;
 		byte[] username, file_name, dest_name, text_b;
-		byte file_name_s, dest_name_s, section;
-		int text_length;
+		byte file_name_s, dest_name_s;
+		int text_length, section;
 		String user, file, dest;
 		User currentUser;
 		Document currentDoc;
@@ -176,7 +176,7 @@ public class TuringServer {
 			case Config.NEW_R :
 				user_s = buffer.get();
 				file_name_s = buffer.get(); //file name length
-				byte sections	= buffer.get(); //number of sections
+				int sections	= buffer.getInt(); //number of sections
 				username = new byte[user_s];
 				buffer.get(username, 0, user_s);
 				user = new String(username, Config.DEFAULT_ENCODING);
@@ -223,7 +223,7 @@ public class TuringServer {
 			    file_name = new byte[file_name_s];
 			    buffer.get(username, 0, user_s);
 			    buffer.get(file_name, 0, file_name_s);
-			    section = buffer.get();
+			    section = buffer.getInt();
 			    user = new String(username, Config.DEFAULT_ENCODING);
 				file = new String(file_name, Config.DEFAULT_ENCODING);
 				System.out.println("SHOW_R: " + user);
@@ -238,11 +238,11 @@ public class TuringServer {
 			    file_name = new byte[file_name_s];
 			    buffer.get(username, 0, user_s);
 			    buffer.get(file_name, 0, file_name_s);
-			    section = buffer.get();
+			    section = buffer.getInt();
 			    user = new String(username, Config.DEFAULT_ENCODING);
 				file = new String(file_name, Config.DEFAULT_ENCODING);
 				currentUser = usersDB.get(user);
-				currentDoc = currentUser.getFile(file);
+				currentDoc = currentUser.getDocument(file);
 				System.out.println("EDIT_R: " + user);
 				if (currentDoc.getStatus(section) == Config.IN_EDIT) {
 					ByteBuffer response = ByteBuffer.allocate(Config.BUF_SIZE);
@@ -266,7 +266,7 @@ public class TuringServer {
 			case Config.END_EDIT_R:
 				user_s = buffer.get(); 
 				file_name_s = buffer.get();
-			    section = buffer.get();
+			    section = buffer.getInt();
 				username = new byte[user_s];
 			    file_name = new byte[file_name_s];
 			    buffer.get(username, 0, user_s);
@@ -274,7 +274,7 @@ public class TuringServer {
 			    user = new String(username, Config.DEFAULT_ENCODING);
 				file = new String(file_name, Config.DEFAULT_ENCODING);
 				currentUser = usersDB.get(user); 
-				currentDoc = currentUser.getFile(file);
+				currentDoc = currentUser.getDocument(file);
 				currentDoc.setStatus(Config.FREE_SECTION, section);
 				System.out.println("END_EDIT_R: " + user);
 				break;
@@ -284,7 +284,7 @@ public class TuringServer {
 				user_s = buffer.get();
 				file_name_s = buffer.get();
 				text_length = buffer.getInt();
-				section = buffer.get();
+				section = buffer.getInt();
 				username = new byte[user_s];
 				file_name = new byte[file_name_s];
 				text_b = new byte[text_length];
@@ -414,7 +414,7 @@ public class TuringServer {
 		}
 		
 		User sendr = usersDB.get(sender);
-		Document source = sendr.getFile(file);
+		Document source = sendr.getDocument(file);
 		if (source == null) {
 			sendResponse(client, Config.NO_SUCH_FILE);
 			return;
@@ -431,11 +431,17 @@ public class TuringServer {
 
 	private static void sendFile(SocketChannel client, String username, String filename, int section_number) {
 		User user = usersDB.get(username);
-		Document doc = user.getFile(filename);
+		Document doc = user.getDocument(filename);
 		String text = null;	
 		
-		if ( section_number == -1) text = getFile(doc.getOwner(), filename);  // retrieves entire document
-		else text = getFileSection(doc.getOwner(), filename, section_number); // retrieves only a section (the requested one)
+		if ( section_number == -1) {  // retrieves entire document
+			text = loadFile(doc.getOwner(), filename);
+			System.out.println("************ Show document ************");
+		}
+		else {  // retrieves only a section (the requested one)
+			text = loadFileSection(doc.getOwner(), filename, section_number);
+			System.out.println("************ Show/Edit section " + section_number + "************");
+		}
 		
 		try {
 			System.out.println(text);
@@ -460,7 +466,7 @@ public class TuringServer {
 	private static void updateFile(SocketChannel client, String username, String filename, byte[] file_text, int section) {
 
 		User user = usersDB.get(username);
-		Document document = user.getFile(filename);
+		Document document = user.getDocument(filename);
 		String owner = new String(document.getOwner());
 		
 		String pathName = new String(Config.FILE_PATH + owner + "\\" + filename);
@@ -476,7 +482,7 @@ public class TuringServer {
 		sendResponse(client, Config.SUCCESS);
 	}
 	
-	private static String getFile(String username, String filename) {
+	private static String loadFile(String username, String filename) {
 		try {
 			String pathName = new String(Config.FILE_PATH + username + "\\" + filename);
 			Path dirPath = Paths.get(pathName);
@@ -488,6 +494,7 @@ public class TuringServer {
 				Path currentPath = it.next();
 				String currentSect = new String(Files.readAllBytes(currentPath));
 				text = text.concat("SECTION_" + i).concat("\n").concat(currentSect).concat("\n");
+				System.out.print("Added section " + i );
 				i++;
 			}
 			paths.close();
@@ -498,7 +505,7 @@ public class TuringServer {
 		}
 	}
 	
-	private static String getFileSection(String username, String filename, int section_n) {
+	private static String loadFileSection(String username, String filename, int section_n) {
 		String pathName = new String(Config.FILE_PATH + username + "\\" + filename);
 		Path filePath = Paths.get(pathName + "\\" + filename + "_" + Integer.toString(section_n) + ".txt");
 		String text = null;

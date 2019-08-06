@@ -19,9 +19,9 @@ public class Document {
 		}
 	}
 	
-	public String getTitle() {
+	public String getTitle() { 
 		return this.title;
-	}
+	} 
 
 	public String getOwner() {
 		return this.owner;
@@ -40,6 +40,7 @@ public class Document {
 	}
 	
 	public void setStatus(byte status, int section) {
+		System.out.println("[DOCUMENT]: setting section " + section + " of file " + this.title + " to " + status);
 		this.section_status[section] = status;
 	}
 }

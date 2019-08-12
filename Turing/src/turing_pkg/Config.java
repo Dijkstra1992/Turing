@@ -8,53 +8,54 @@ import java.util.Arrays;
 final class Config {
 	
 	/* configuration values */
-	public static final int BUF_SIZE		 	 = 4096;
-	public static final String SERVER_IP 	     = "localhost";
-	public static final int SERVER_PORT 		 = 2026;
-	public static final int REMOTE_SERVICE_PORT	 = 2027;
-	public static final int CHAT_SERVICE_PORT	 = 2028;
-	public static final String DEFAULT_ENCODING	 = "UTF-8";
-													//server file storage path
-	public static final String FILE_PATH 		 = "C:\\Users\\Pietro\\Desktop\\Progetto_Reti\\Code\\TuringDB\\"; 
-	public static final String TEMP_FOLDER		 = "C:\\Users\\Pietro\\Desktop\\Progetto_Reti\\Code\\TuringDB\\TEMP";
+	public static final int BUF_SIZE		 	 	= 4096;
+	public static final int SERVER_PORT 		 	= 3026;
+	public static final int REMOTE_SERVICE_PORT	 	= 3027;
+	public static final int CHAT_SERVICE_PORT	 	= 3028;
+	public static final int NOTIFY_SERVICE_PORT 	= 3029; 		// Server message handler address
+	public static final String SERVER_IP 	     	= "127.0.0.1";  // Local address, for client-server comunication (TCP)
+	public static final String CHAT_SERVICE_ADDRESS = "226.0.0.0";	// TEST USE ONLY
+	public static final String DEFAULT_ENCODING	 	= "UTF-8";
+	public static final String FILE_PATH 		 	= "C:\\Users\\Pietro\\Desktop\\Progetto_Reti\\Code\\TuringDB\\"; 
+	public static final String TEMP_FOLDER		 	= "C:\\Users\\Pietro\\Desktop\\Progetto_Reti\\Code\\TuringDB\\TEMP";
 	
 	/* request types codification */
-	public static final byte LOGIN_R		= (byte) 0;	// login request
-	public static final byte LOGOUT_R 		= (byte) 1;	// logout request
-	public static final byte NEW_R	 		= (byte) 2;	// create new document request
-	public static final byte EDIT_R			= (byte) 3; // edit an existing document request
-	public static final byte END_EDIT_R		= (byte) 4; // close editing section request
-	public static final byte SHARE_R 		= (byte) 5;	// share document request
-	public static final byte LIST_R			= (byte) 6; // lists all proprietary/shared files
-	public static final byte SHOW_R		 	= (byte) 7; // download section request
-	public static final byte SAVE_R			= (byte) 8; // save edited section request
+	public static final byte LOGIN_R		= (byte) 0x064;	// login request
+	public static final byte LOGOUT_R 		= (byte) 0x065;	// logout request
+	public static final byte NEW_R	 		= (byte) 0x066;	// create new document request
+	public static final byte EDIT_R			= (byte) 0x067; // edit an existing document request
+	public static final byte END_EDIT_R		= (byte) 0x068; // close editing section request
+	public static final byte SHARE_R 		= (byte) 0x069;	// share document request
+	public static final byte LIST_R			= (byte) 0x070; // lists all proprietary/shared files
+	public static final byte SHOW_R		 	= (byte) 0x071; // download section request
+	public static final byte SAVE_R			= (byte) 0x072; // save edited section request
 	
 		
 	/* errors and messages codification */
-	public static final byte SUCCESS 	 	= (byte) 0;
-	public static final byte INVALID_PASS	= (byte) 1;
-	public static final byte ALREADY_ON 	= (byte) 3;
-	public static final byte UNKNOWN_USER	= (byte) 4;
-	public static final byte UNKNOWN_ERROR 	= (byte) 5;
-	public static final byte NO_SUCH_FILE	= (byte) 6;
-	public static final byte INVALID_DEST   = (byte) 7;
-	public static final byte EMPTY_LIST		= (byte) 8;
-	public static final byte INVALID_SECT	= (byte) 9;
-	public static final byte RECEIVING_BYTES= (byte) 10;
-	public static final byte NO_BYTES 		= (byte) 11;
+	public static final byte SUCCESS 	 	= (byte) 0x164;
+	public static final byte INVALID_PASS	= (byte) 0x165;
+	public static final byte ALREADY_ON 	= (byte) 0x166;
+	public static final byte UNKNOWN_USER	= (byte) 0x167;
+	public static final byte UNKNOWN_ERROR 	= (byte) 0x168;
+	public static final byte NO_SUCH_FILE	= (byte) 0x169;
+	public static final byte INVALID_DEST   = (byte) 0x170;
+	public static final byte EMPTY_LIST		= (byte) 0x171;
+	public static final byte INVALID_SECT	= (byte) 0x172;
+	public static final byte RECEIVING_BYTES= (byte) 0x173;
+	public static final byte NO_BYTES 		= (byte) 0x174;
 	
 	/* file permissions codification  */
-	public static final byte CREATOR		= (byte) 0;
-	public static final byte SHARED			= (byte) 1;
+	public static final byte CREATOR		= (byte) 0x264;
+	public static final byte SHARED			= (byte) 0x265;
 	
 	/* file section status */
-	public static final byte FREE_SECTION	= (byte) 0;
-	public static final byte IN_EDIT		= (byte) 1;
+	public static final byte FREE_SECTION	= (byte) 0x364;
+	public static final byte IN_EDIT		= (byte) 0x365;
 	
 	/* CLIENT status codes */
-	public static final byte OFFLINE		= (byte) 0;
-	public static final byte ONLINE			= (byte) 1;
-	public static final byte EDITING		= (byte) 2;
+	public static final byte OFFLINE		= (byte) 0x464;
+	public static final byte ONLINE			= (byte) 0x465;
+	public static final byte EDITING		= (byte) 0x466;
 	
 	private Config () {}
 	 

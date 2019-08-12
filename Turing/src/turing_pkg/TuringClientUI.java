@@ -27,6 +27,8 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.SocketException;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.rmi.NotBoundException;
@@ -72,6 +74,9 @@ public class TuringClientUI {
 	private static Map<String, Integer> documents;
 	private static Registry turing_services;
 	private static TuringRemoteService remoteOBJ;
+	private static DatagramSocket chatSocket;
+	private static InetAddress chatAddress;
+	private static MulticastReceiver mc_receiver;
 	private static byte CLIENT_STATUS;
 	
 	/* UI components */
@@ -110,7 +115,7 @@ public class TuringClientUI {
 					UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); 
 					initialize();
 					CLIENT_STATUS = Config.OFFLINE;
-					mainFrame.setVisible(true);  
+					mainFrame.setVisible(true);
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -135,15 +140,24 @@ public class TuringClientUI {
 							"All changes to open files will be lost. Do you really want to exit ?",
 							"Confirm close", 
 							JOptionPane.YES_NO_OPTION,
-							JOptionPane.WARNING_MESSAGE);
+							JOptionPane.QUESTION_MESSAGE);
 					if ( selection == JOptionPane.YES_OPTION ) {
 						mainFrame.dispose();
+						System.out.print("UI components released successfully");
 						return;
 					}
 				}
 				else {
-					mainFrame.dispose();
-					return;
+					selection = JOptionPane.showConfirmDialog(null, 
+							"Do you really want to exit ?",
+							"Confirm close", 
+							JOptionPane.YES_NO_OPTION,
+							JOptionPane.QUESTION_MESSAGE);
+					if ( selection == JOptionPane.YES_OPTION ) {
+						mainFrame.dispose();
+						System.out.print("UI components released successfully");
+						return;
+					}
 				}
 			}
 		});
@@ -175,6 +189,17 @@ public class TuringClientUI {
 		btnSend.setBounds(10, 470, 130, 25);
 		panel.add(btnSend);
 		btnSend.setEnabled(false);
+		btnSend.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent evt) {
+				String text = new String(message_box.getText());
+				byte[] buffer = new byte[256];
+				try {
+					buffer = text.getBytes(Config.DEFAULT_ENCODING);
+					DatagramPacket packet = new DatagramPacket(buffer, buffer.length, chatAddress, Config.CHAT_SERVICE_PORT);
+					chatSocket.send(packet);
+				} catch (IOException e) {e.printStackTrace();}
+			}
+		});
 
 		/* status bar */
 		statusBar = new JTextField();
@@ -475,6 +500,7 @@ public class TuringClientUI {
 				try {
 					client_ch = SocketChannel.open(server_address);
 					client_ch.configureBlocking(false);
+					
 					loginRequest(username, password);
 					byte r;
 					if ( (r=getResponse()) == Config.SUCCESS ) {
@@ -801,12 +827,14 @@ public class TuringClientUI {
 		// Edit button listener
 		btnEdit.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
+				
 				if (CLIENT_STATUS == Config.EDITING) {
 					JOptionPane.showMessageDialog(
 							mainFrame,
 							"You need to close current editing session before starting a new one");
 					return;
 				}
+				
 				int s = s_lister.getSelectedIndex(); 
 				String text;
 				try {
@@ -818,11 +846,17 @@ public class TuringClientUI {
 						editor.setLocation(mainFrame.getX() + mainFrame.getWidth(), mainFrame.getY());
 						editor.setVisible(true);
 						CLIENT_STATUS = Config.EDITING;
+						String chat_address = getGroupAddress();
+						System.out.println("Retrieved group address: " + chat_address);
+						chatAddress = InetAddress.getByName(chat_address);
 						enableChat();
+						System.out.println("Chat service enabled!");
 					} 
 					popupMenu.setVisible(false);	
-				} catch (UnsupportedEncodingException e) {
-					JOptionPane.showMessageDialog(mainFrame, e.getMessage(), "ERROR", JOptionPane.ERROR_MESSAGE);
+				} catch (UnsupportedEncodingException enc_e) {
+					JOptionPane.showMessageDialog(mainFrame, enc_e.getMessage(), "ERROR", JOptionPane.ERROR_MESSAGE);
+				} catch (UnknownHostException host_e) {
+					host_e.printStackTrace();
 				}
 			}
 		});
@@ -1091,7 +1125,7 @@ public class TuringClientUI {
 		
 	}
 
-	/* Downloads a file from the server */
+	/* Download a file from the server */
 	private static String downloadFile() throws IOException {
 		
 		ByteBuffer buffer = ByteBuffer.allocate(Config.BUF_SIZE);
@@ -1183,8 +1217,11 @@ public class TuringClientUI {
 		request.put(filename.getBytes(Config.DEFAULT_ENCODING));
 		
 		request.flip();
+		
 		try {
 			client_ch.write(request);
+			disableChat();
+			CLIENT_STATUS = Config.ONLINE;
 		} catch (IOException req_ex) {
 			JOptionPane.showMessageDialog(mainFrame, req_ex.getMessage());
 			return;
@@ -1209,6 +1246,22 @@ public class TuringClientUI {
 		return r_code;		
 	}
 
+	/* Waits to receive a multicast address from the server */
+	private static String getGroupAddress() {
+		String group_address = null;
+		
+		ByteBuffer buffer = ByteBuffer.allocate(32);
+		try {
+			while (client_ch.read(buffer) <= 0) {
+			}
+			buffer.flip();
+			group_address = new String(buffer.array(), Config.DEFAULT_ENCODING);
+		} catch (IOException io_ex) {io_ex.printStackTrace(); }
+		
+		
+		return group_address;
+	}
+	
 	/* Checks if the chosen <username, password> meets the requirements */
 	private static boolean isValidUser(String username, char[] password) {
 
@@ -1227,6 +1280,8 @@ public class TuringClientUI {
 	private static void enableOnlineService() {
 		
 		CLIENT_STATUS = Config.ONLINE;
+		
+		/* Enabling UI components */
 		mntmNew.setEnabled(true);
 		mntmList.setEnabled(true);
 		btnSend.setEnabled(true);
@@ -1249,17 +1304,40 @@ public class TuringClientUI {
 	
 	/* Enables chat service for current file work-group */
 	private static void enableChat() {
-		//TODO: start ChatManager thread
+				
+		/* initialize UDP Socket for chat message exchange */
+		try {
+			chatSocket = new DatagramSocket();
+			mc_receiver = new MulticastReceiver(chatAddress);
+			mc_receiver.start();
+			System.out.println("Chat enabled...");
+
+		} catch (SocketException e) {
+			e.printStackTrace();
+		}
+		
+		/* enable UI components */
 		chat_history.setEnabled(true);
 		message_box.setEnabled(true);
+		btnSend.setEnabled(true);
 		chat_history.setBackground(Color.WHITE);
 		message_box.setBackground(Color.WHITE);
+		
 	}
 	
 	/* Disables chat service */
 	private static void disableChat() {
+		
+		/* delete chat socket and msg_sender thread */
+		chatSocket.close();
+		mc_receiver.interrupt();
+		System.out.println("Chat disabled...");
+		
+		chat_history.setText("");
+		message_box.setText("");
 		chat_history.setEnabled(false);
 		message_box.setEnabled(false);
+		btnSend.setEnabled(false);
 		chat_history.setBackground(Color.GRAY);
 		message_box.setBackground(Color.GRAY);
 	}
@@ -1302,4 +1380,5 @@ public class TuringClientUI {
 
 	    }
 	}
+	
 }

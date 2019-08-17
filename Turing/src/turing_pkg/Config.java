@@ -14,21 +14,22 @@ final class Config {
 	public static final int CHAT_SERVICE_PORT	 	= 3028;
 	public static final int NOTIFY_SERVICE_PORT 	= 3029; 		// Server message handler address
 	public static final String SERVER_IP 	     	= "127.0.0.1";  // Local address, for client-server comunication (TCP)
-	public static final String CHAT_SERVICE_ADDRESS = "226.0.0.0";	// TEST USE ONLY
+//	public static final String CHAT_SERVICE_ADDRESS = "226.0.0.0";	// TEST USE ONLY
 	public static final String DEFAULT_ENCODING	 	= "UTF-8";
 	public static final String FILE_PATH 		 	= "C:\\Users\\Pietro\\Desktop\\Progetto_Reti\\Code\\TuringDB\\"; 
 	public static final String TEMP_FOLDER		 	= "C:\\Users\\Pietro\\Desktop\\Progetto_Reti\\Code\\TuringDB\\TEMP";
 	
 	/* request types codification */
-	public static final byte LOGIN_R		= (byte) 0x064;	// login request
-	public static final byte LOGOUT_R 		= (byte) 0x065;	// logout request
-	public static final byte NEW_R	 		= (byte) 0x066;	// create new document request
-	public static final byte EDIT_R			= (byte) 0x067; // edit an existing document request
-	public static final byte END_EDIT_R		= (byte) 0x068; // close editing section request
-	public static final byte SHARE_R 		= (byte) 0x069;	// share document request
-	public static final byte LIST_R			= (byte) 0x070; // lists all proprietary/shared files
-	public static final byte SHOW_R		 	= (byte) 0x071; // download section request
-	public static final byte SAVE_R			= (byte) 0x072; // save edited section request
+	public static final byte LOGIN_R		= (byte) 0x064;			// login request
+	public static final byte LOGOUT_R 		= (byte) 0x065;			// logout request
+	public static final byte NEW_R	 		= (byte) 0x066;			// create new document request
+	public static final byte EDIT_R			= (byte) 0x067; 		// edit an existing document request
+	public static final byte END_EDIT_R		= (byte) 0x068; 		// close editing section request
+	public static final byte SHARE_R 		= (byte) 0x069;			// share document request
+	public static final byte LIST_R			= (byte) 0x070; 		// lists all proprietary/shared files
+	public static final byte SHOW_R		 	= (byte) 0x071; 		// download section request
+	public static final byte SAVE_R			= (byte) 0x072; 		// save edited section request
+	public static final byte NOTIFY_R		= (byte) 0x073;			// notification service start request
 	
 		
 	/* errors and messages codification */

@@ -3,7 +3,9 @@ package turing_pkg;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -16,6 +18,7 @@ import java.nio.file.StandardOpenOption;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -30,18 +33,18 @@ import turing_pkg.Config;
 public class TuringServer {
 	
 	/* Users database structure */ 
-	public static Map<String, User> usersDB; 	 			// registered users (<username, User>)
-	private static Map<String, SocketChannel> loggedUsers;	// online users (<username, client_channel>)
-	private static Map<String, String> openDocuments;		// list of currently open sections for editing (<section_name, username>)
-	private static Map<String, String> chatGroups;		    // list of open documents and associated chat addresses
-//	private static LinkedBlockingQueue<Runnable> notificationsQueue;
+	public static Map<String, User> usersDB; 	 						// registered users (<username, User>)
+	private static Map<String, SocketChannel> loggedUsers;				// online users (<username, client_socket_channel>)
+	private static Map<String, String> editingSessions;					// list of currently open sections for editing (<file_section_name, username>)
+	private static Map<String, ChatGroup> chatGroups;					// for chat groups managing (<filename, chatgroup object>)
+	private static Map<String, ArrayList<String>> pendingNotifications;	// <username, notification_messages_list>
 	private static ServerSocketChannel server_ch = null;
 	private static Selector ch_selector = null;
 	
 	public static void main(String[] args) throws InterruptedException, IOException {
 		
-		/* Server initialization */
-		System.out.println("Initializing server...");		
+		/* Server socket init */
+		System.out.println("Initializing server...");
 		try {
 			server_ch = ServerSocketChannel.open();
 			server_ch.socket().bind(new InetSocketAddress(Config.SERVER_IP, Config.SERVER_PORT));
@@ -50,18 +53,14 @@ public class TuringServer {
 			server_ch.register(ch_selector, SelectionKey.OP_ACCEPT);
 		} catch (Exception e) { e.printStackTrace(); }
 		
-		/* Notification handler thread initialization */
-//		notificationsQueue = new LinkedBlockingQueue<Runnable>();
-//		ThreadPoolExecutor notification_manager = new ThreadPoolExecutor(1, 4, 1, TimeUnit.HOURS, notificationsQueue);
-//		notification_manager.prestartCoreThread();
-		
 		/* Data structures initialization */
 		usersDB = new HashMap<String, User>();
 		loggedUsers = new HashMap<String, SocketChannel>(); 
-		openDocuments = new HashMap<String, String>();
-		chatGroups = new HashMap<String, String>();
-		
-		/* export remote registration method */
+		editingSessions = new HashMap<String, String>();
+		chatGroups = new HashMap<String, ChatGroup>();
+		pendingNotifications = new HashMap<String, ArrayList<String>>();
+
+		/* Remote service export (RMI - account registration service) */
 		TuringRemoteRegisterOP remote_service = new TuringRemoteRegisterOP();
 		TuringRemoteService stub = (TuringRemoteService) UnicastRemoteObject.exportObject(remote_service, Config.REMOTE_SERVICE_PORT);
 		LocateRegistry.createRegistry(Config.REMOTE_SERVICE_PORT);
@@ -75,9 +74,8 @@ public class TuringServer {
 		
 		ByteBuffer buffer = ByteBuffer.allocate(Config.BUF_SIZE);
 		while (true) { // server routine
-			System.out.println("Waiting for incoming connections...");
 			try { 
-				ch_selector.select(5000);
+				ch_selector.select();
 				key_set = ch_selector.selectedKeys();
 				key_iterator = key_set.iterator();
 				
@@ -87,22 +85,25 @@ public class TuringServer {
 					if ( ready_key.isAcceptable() ) {
 						// new connection request received on server channel 
 						SocketChannel client = server_ch.accept();
+						System.out.println(client.getRemoteAddress());
 						client.configureBlocking(false);
 						client.register(ch_selector, SelectionKey.OP_READ);
-						System.out.println("Client connected (remote)" + client.getRemoteAddress());
-						System.out.println("Client connected  (local)" + client.getLocalAddress());
+						
 					}
 					
 					else if ( ready_key.isReadable() ) {
 						// a client is sending a request on his channel
 						SocketChannel client = (SocketChannel) ready_key.channel();
-						try { buffer.clear(); readRequest(client, buffer); }
+						try { 
+							buffer.clear(); 
+							readRequest(client, buffer); 
+						}
 						catch (UnsupportedEncodingException encode_ex) {
 							encode_ex.printStackTrace();
 						}
-						catch (IOException io_ex) {
+						catch (IOException io_ex) { // client closed connection
 							if (loggedUsers.containsValue(client)) {
-								disconnectClient(client);
+								closeSession(client);
 								System.out.println(client.getRemoteAddress() + " -> " + io_ex.getLocalizedMessage());
 							}
 							client.close();
@@ -256,7 +257,6 @@ public class TuringServer {
 				if (currentDoc.getStatus(section) == Config.IN_EDIT) {
 					ByteBuffer response = ByteBuffer.allocate(Config.BUF_SIZE);
 					response.put(Config.IN_EDIT);
-//					response.put(openDocuments.get(file).getBytes(Config.DEFAULT_ENCODING)); --> useless
 					response.flip();
 					try {
 						client.write(response);
@@ -266,9 +266,10 @@ public class TuringServer {
 				} 
 				else {
 					currentDoc.setStatus(Config.IN_EDIT, section);
-					openDocuments.put(file, user);
+					editingSessions.put(user, file);
+					currentUser.setSessionStatus(file, section);
 					sendFile(client, user, file, section);			// send requested file
-					putUserInGroup(client, file);
+					putUserInGroup(client, file, user);				// adds user to chat group 
 				}
 				break;
 				
@@ -287,7 +288,7 @@ public class TuringServer {
 				currentDoc = currentUser.getDocument(file);
 				currentDoc.setStatus(Config.FREE_SECTION, section);
 				System.out.println("END_EDIT_R: " + user);
-				// TODO: remove user from chat_group
+				removeUserFromGroup(user, file);	// removes user from chat groups. NOTE: deletes the group if no other users are working on it
 				break;
 				
 			/* gets new file version from client */
@@ -306,6 +307,27 @@ public class TuringServer {
 				file = new String(file_name, Config.DEFAULT_ENCODING);
 				System.out.println("SAVE_R: " + user);
 				updateFile(client, user, file, text_b, section);
+				break;
+				
+			case Config.NOTIFY_R:
+				user_s = buffer.get();
+				username = new byte[user_s];
+				buffer.get(username, 0, user_s);
+				user = new String(username, Config.DEFAULT_ENCODING);
+				System.out.println("[NOTIFY_R]: " +  user);
+				User current_user = usersDB.get(user);
+				current_user.addNotificationChannel(client);
+				System.out.println("Added notification address: " + client.getRemoteAddress() + " to user " + user);
+				sendResponse(client, Config.SUCCESS);
+				/* if user had offline notifications, send them now */
+				if (pendingNotifications.containsKey(user)) {
+					String message = new String("");
+					Iterator<String> it = pendingNotifications.get(user).iterator();
+					while (it.hasNext()) {
+						message = message.concat(it.next() + "\n");
+					}
+					sendNotification(client, message);
+				}
 				break;
 				
 			default	: 
@@ -343,6 +365,7 @@ public class TuringServer {
 		// user login
 		loggedUsers.put(username, client);
 		sendResponse(client, Config.SUCCESS); 
+		
 	}
 	
 	private static void newDocCreate(SocketChannel client, String username, String filename, int sections) {
@@ -433,19 +456,20 @@ public class TuringServer {
 		recvr.addFile(source);
 		sendResponse(client, Config.SUCCESS);
 		
-		if (loggedUsers.containsKey(receiver)) {
-			//TODO: send notification to receiver
-//			InetAddress addr = loggedUsers.get(receiver).socket().getInetAddress();
-//			try {
-//				NotificationTask notification = new NotificationTask(
-//						addr, 
-//						sender + " shared file " + source.getTitle() + " with you");
-//			
-//				notificationsQueue.put(notification);
-//				System.out.println("Added notification '" + sender + " " + addr + " shared " + source.getTitle());
-//			} catch (InterruptedException e) {
-//				e.printStackTrace();
-//			}
+		String message = new String(sender + " shared file '" + file + "' with you");
+		
+		if (!loggedUsers.containsKey(receiver)) { // add notification to pending notifications queue for this receiver
+			if (pendingNotifications.containsKey(receiver)) {
+				pendingNotifications.get(receiver).add(message);
+			} else {
+				ArrayList<String> notifications_list = new ArrayList<String>();
+				notifications_list.add(message);
+				pendingNotifications.put(receiver, notifications_list);
+			}
+		} else { // send notification to online receiver
+			User rcv = usersDB.get(receiver);
+			SocketChannel notify_ch = rcv.getNotificationChannel();
+			sendNotification(notify_ch, message);
 		}
 		
 		return;
@@ -549,30 +573,56 @@ public class TuringServer {
 		
 	}
 	
-	private static void disconnectClient(SocketChannel client) {
+	private static void closeSession(SocketChannel client) {
 		
-		Set<Entry<String, SocketChannel>> usersQueue = loggedUsers.entrySet();
-		Iterator<Entry<String, SocketChannel>> it = usersQueue.iterator();
+		Set<Entry<String, SocketChannel>> usersSet = loggedUsers.entrySet();
+		Iterator<Entry<String, SocketChannel>> it = usersSet.iterator();
 		while (it.hasNext()) {
 			Entry<String, SocketChannel> current = (Entry<String, SocketChannel>) it.next();
 			if (current.getValue().equals(client)) {
-				loggedUsers.remove(current.getKey());
+				String username = new String(current.getKey());
+				loggedUsers.remove(username);
+				try {
+					User current_user = usersDB.get(username);
+					if (current_user.hasOpenSessions()) { // if client closed connection while in editing-mode, then clean all session info
+						String session_name = new String(current_user.getOpenSessionName());
+						int session_index = current_user.getOpenSessionIndex();
+						current_user.getDocument(session_name).setStatus(Config.FREE_SECTION, session_index); // release document section
+						current_user.setSessionStatus(null, -1);		// clean user session status
+						editingSessions.remove(session_name);			// remove user from active editing sessions list
+						ChatGroup group = chatGroups.get(session_name); 
+						group.removeUser(username);						// remove user from chat group 
+					}
+					current_user.getNotificationChannel().close();		// close user notification channel 
+				} catch (IOException io_ex) { io_ex.printStackTrace(); }
 				return;
 			}
 		}
 	}
-
-	private static void putUserInGroup(SocketChannel client, String filename) {
+	
+	private static void putUserInGroup(SocketChannel client, String filename, String username) {
 		String group_address;
 		if (chatGroups.containsKey(filename)) {
-			group_address = chatGroups.get(filename);
+			group_address = (chatGroups.get(filename)).getGroupAddress();
+			(chatGroups.get(filename)).addUser(username);
 			System.out.println("Group already exists");
 		} else {
-			group_address = getFreeChatGroupAddress();
-			chatGroups.put(filename, group_address);
+			while ((group_address = getFreeChatGroupAddress()) == null ) {}
+			System.out.println("Generated address: " + group_address);
+			ChatGroup group = new ChatGroup(group_address);
+			group.addUser(username);
+			chatGroups.put(filename, group);
 			System.out.println("New group created");
 		}
 		sendAddress(client, group_address);
+	}
+	
+	private static void removeUserFromGroup(String username, String filename) {
+		ChatGroup group = chatGroups.get(filename);
+		group.removeUser(username);
+		if (group.openSections == 0) {
+			chatGroups.remove(filename);
+		}
 	}
 	
 	private static String getFreeChatGroupAddress() {
@@ -580,6 +630,20 @@ public class TuringServer {
 		Random r = new Random();
 		rnd_generated = rnd_generated.concat(r.nextInt(256) + "." + r.nextInt(256) + "." + r.nextInt(256));
 		System.out.println("Generated address: " + rnd_generated);
+		try {
+			InetAddress address = InetAddress.getByName(rnd_generated);
+			if (address.isReachable(10)) {
+				System.out.println("Address already in use");
+				return null;
+			}
+		} catch (UnknownHostException e) {
+			System.out.println("Invalid address");
+			return null;
+		} catch (IOException e) {
+			System.out.println("Invalid address");
+			return null;
+		}
+		
 		return rnd_generated;
 	}
 	
@@ -596,5 +660,15 @@ public class TuringServer {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+	}
+
+	private static void sendNotification(SocketChannel client, String message) {
+		try {	
+			ByteBuffer buffer = ByteBuffer.allocate(Config.BUF_SIZE);
+			buffer.put(message.getBytes(Config.DEFAULT_ENCODING));
+			buffer.flip();
+			client.write(buffer);
+			System.out.println("Notification sent to " + client.getRemoteAddress() + "\n\t->" + message);
+		} catch (IOException io_ex) {io_ex.printStackTrace();}
 	}
 }

@@ -66,12 +66,6 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.border.EmptyBorder;
-import com.jgoodies.forms.layout.FormLayout;
-import com.jgoodies.forms.layout.ColumnSpec;
-import com.jgoodies.forms.layout.FormSpecs;
-import com.jgoodies.forms.layout.RowSpec;
-import javax.swing.BoxLayout;
-import java.awt.Insets;
 
 public class TuringClientUI {
 
@@ -421,6 +415,7 @@ public class TuringClientUI {
 								"Successfully registered", 
 								"Success!", 
 								JOptionPane.INFORMATION_MESSAGE);
+						dialog.dispose();
 					}
 					else {
 						JOptionPane.showMessageDialog( 
@@ -428,8 +423,9 @@ public class TuringClientUI {
 								"This username is not available",
 								"Invalid username/password", 
 								JOptionPane.INFORMATION_MESSAGE);
+						userfield.setText("");
+						passfield.setText("");
 					}
-					dialog.dispose();
 				}catch (NotBoundException | HeadlessException | RemoteException ex) {
 					JOptionPane.showMessageDialog(
 							mainFrame, 
@@ -514,7 +510,6 @@ public class TuringClientUI {
 				try {
 					/* Open comunication and data transfer socket channel */
 					client_ch = SocketChannel.open(server_address);
-					System.out.println("Comunication socket opened: " + client_ch.getLocalAddress());
 					client_ch.configureBlocking(false);
 					
 					loginRequest(username, password);
@@ -719,7 +714,7 @@ public class TuringClientUI {
 		mntmEdit.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
 				String selected_file = new String(file_explorer.getSelectedValue());
-				JPopupMenu popup = editPopupMenu(selected_file, documents.get(selected_file));
+				JPopupMenu popup = editSectionPopupMenu(selected_file, documents.get(selected_file));
 				popup.setLocation(MouseInfo.getPointerInfo().getLocation());
 				armPopup(popup);
 				popup.setVisible(true);
@@ -826,7 +821,7 @@ public class TuringClientUI {
 		return dialog;
 	}
 
-	private static JPopupMenu editPopupMenu(String filename, int sections) {
+	private static JPopupMenu editSectionPopupMenu(String filename, int sections) {
 		JPopupMenu popupMenu = new JPopupMenu();
 		JPanel panel = new JPanel();
 		JComboBox<Integer> s_lister = new JComboBox<Integer>();
@@ -912,7 +907,6 @@ public class TuringClientUI {
 					if (text == null) {
 						JOptionPane.showMessageDialog(file_explorer, "Error retrieving selected file");
 					} else {
-						System.out.println(text);
 						JDialog viewer = new JDialog();
 						JTextArea textArea = new JTextArea();
 						textArea.setEditable(false);
@@ -1170,9 +1164,7 @@ public class TuringClientUI {
 		data.put(b_data);
 		data.flip();
 		byte_stream.close();
-		
-		System.out.println("Received " + data.position() + " bytes");
-		
+				
 		r_code = data.get();
 		if (r_code == Config.IN_EDIT) {
 			byte[] editing_user_b = new byte[data.remaining()];
@@ -1318,7 +1310,7 @@ public class TuringClientUI {
 			notifyServiceStartRequest(userName);
 			byte r;
 			if ( (r=getResponse(notification_ch)) == Config.SUCCESS) { // start notification listener thread
-				notification_handler = new Thread(new NotificationHandler(notification_ch, mainFrame));
+				notification_handler = new Thread(new NotificationHandler(notification_ch));
 				notification_handler.start();
 			} else {
 				JOptionPane.showMessageDialog(mainFrame, Config.ERROR_LOG(r));

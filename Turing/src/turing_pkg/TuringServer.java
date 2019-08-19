@@ -225,7 +225,7 @@ public class TuringServer {
 				shareDoc(client, user, dest, file);
 				break; 
 				
-			/* download file request (for client "show" and "show section" requests) */
+			/* "show" and "show section" requests */
 			case Config.SHOW_R:	
 				user_s = buffer.get(); 
 				file_name_s = buffer.get();
@@ -265,15 +265,15 @@ public class TuringServer {
 					}
 				} 
 				else {
-					currentDoc.setStatus(Config.IN_EDIT, section);
-					editingSessions.put(user, file);
-					currentUser.setSessionStatus(file, section);
 					sendFile(client, user, file, section);			// send requested file
 					putUserInGroup(client, file, user);				// adds user to chat group 
+					currentDoc.setStatus(Config.IN_EDIT, section);
+					editingSessions.put(new String(file + "_" + section), user);
+					currentUser.setSessionStatus(file, section);
 				}
 				break;
 				
-			/* client finished editing on a file section */
+			/* client closed editing session */
 			case Config.END_EDIT_R:
 				user_s = buffer.get(); 
 				file_name_s = buffer.get();
@@ -309,6 +309,7 @@ public class TuringServer {
 				updateFile(client, user, file, text_b, section);
 				break;
 				
+			/* sets up a notification channel for the client */
 			case Config.NOTIFY_R:
 				user_s = buffer.get();
 				username = new byte[user_s];
@@ -327,6 +328,7 @@ public class TuringServer {
 						message = message.concat(it.next() + "\n");
 					}
 					sendNotification(client, message);
+					pendingNotifications.remove(user);
 				}
 				break;
 				
@@ -436,14 +438,19 @@ public class TuringServer {
 	
 	private static void shareDoc(SocketChannel client, String sender, String receiver, String file) {
 		
-		if (sender.equals(receiver)) {
+		if (sender.equals(receiver)) { 
 			sendResponse(client, Config.INVALID_DEST);
 			return;
 		}
 		
 		User recvr = usersDB.get(receiver);
-		if ( recvr == null) {
+		if ( recvr == null) { 
 			sendResponse(client, Config.UNKNOWN_USER);
+			return;
+		}
+		
+		if ( recvr.getDocument(file) != null) {
+			sendResponse(client, Config.INVALID_DEST);
 			return;
 		}
 		
@@ -456,17 +463,18 @@ public class TuringServer {
 		recvr.addFile(source);
 		sendResponse(client, Config.SUCCESS);
 		
+		/* Notify receiver */
 		String message = new String(sender + " shared file '" + file + "' with you");
 		
 		if (!loggedUsers.containsKey(receiver)) { // add notification to pending notifications queue for this receiver
-			if (pendingNotifications.containsKey(receiver)) {
+			if (pendingNotifications.containsKey(receiver)) { // notification list already exists for this user
 				pendingNotifications.get(receiver).add(message);
-			} else {
+			} else { // create new notification list
 				ArrayList<String> notifications_list = new ArrayList<String>();
 				notifications_list.add(message);
 				pendingNotifications.put(receiver, notifications_list);
 			}
-		} else { // send notification to online receiver
+		} else { // send notification directly to receiver if online
 			User rcv = usersDB.get(receiver);
 			SocketChannel notify_ch = rcv.getNotificationChannel();
 			sendNotification(notify_ch, message);
@@ -481,10 +489,10 @@ public class TuringServer {
 		String text = null;	
 		
 		if ( section_number == -1) {  // retrieves entire document from DB
-			text = loadFile(doc.getOwner(), filename);
+			text = loadFile(doc, doc.getOwner(), filename);
 		}
 		else {  // retrieves requested section from DB
-			text = loadFileSection(doc.getOwner(), filename, section_number);
+			text = loadFileSection(doc, doc.getOwner(), filename, section_number);
 		}
 		
 		try {
@@ -525,7 +533,7 @@ public class TuringServer {
 		sendResponse(client, Config.SUCCESS);
 	}
 	
-	private static String loadFile(String username, String filename) {
+	private static String loadFile(Document doc, String username, String filename) {
 		try {
 			String pathName = new String(Config.FILE_PATH + username + "\\" + filename);
 			Path dirPath = Paths.get(pathName);
@@ -536,8 +544,13 @@ public class TuringServer {
 			while (it.hasNext()) {
 				Path currentPath = it.next();
 				String currentSect = new String(Files.readAllBytes(currentPath));
-				text = text.concat("SECTION_" + i).concat("\n").concat(currentSect).concat("\n");
-				System.out.print("Added section " + i );
+				if (doc.getStatus(i) == Config.IN_EDIT) {
+					String editor = new String(editingSessions.get(filename + "_" + i));
+					text = text.concat("(section " + i + ", in edit by " + editor + ")\n").concat(currentSect + "\n");
+				}
+				else {
+					text = text.concat("(section " + i + ")\n").concat(currentSect + "\n");
+				}
 				i++;
 			}
 			paths.close();
@@ -548,12 +561,16 @@ public class TuringServer {
 		}
 	}
 	
-	private static String loadFileSection(String username, String filename, int section_n) {
+	private static String loadFileSection(Document doc, String username, String filename, int section_n) {
 		String pathName = new String(Config.FILE_PATH + username + "\\" + filename);
 		Path filePath = Paths.get(pathName + "\\" + filename + "_" + Integer.toString(section_n) + ".txt");
-		String text = null;
+		String text = new String("");
+		if (doc.getStatus(section_n) == Config.IN_EDIT) {
+			String editor = new String(editingSessions.get(filename + "_" + section_n));
+			text = text.concat("(In edit by " + editor + ")\n");
+		}
 		try {
-			text = new String(Files.readAllBytes(filePath));
+			text = text.concat(new String(Files.readAllBytes(filePath)));
 		} catch (IOException io_ex) {
 			io_ex.printStackTrace();
 		}
@@ -584,12 +601,12 @@ public class TuringServer {
 				loggedUsers.remove(username);
 				try {
 					User current_user = usersDB.get(username);
-					if (current_user.hasOpenSessions()) { // if client closed connection while in editing-mode, then clean all session info
+					if (current_user.hasOpenSessions()) { // client crashed while in edit-mode ==> clean session & free document section
 						String session_name = new String(current_user.getOpenSessionName());
 						int session_index = current_user.getOpenSessionIndex();
 						current_user.getDocument(session_name).setStatus(Config.FREE_SECTION, session_index); // release document section
 						current_user.setSessionStatus(null, -1);		// clean user session status
-						editingSessions.remove(session_name);			// remove user from active editing sessions list
+						editingSessions.remove(session_name + "_" + session_index);	// remove user from active editing sessions list
 						ChatGroup group = chatGroups.get(session_name); 
 						group.removeUser(username);						// remove user from chat group 
 					}

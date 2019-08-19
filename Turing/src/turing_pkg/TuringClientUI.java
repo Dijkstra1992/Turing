@@ -16,10 +16,13 @@ import java.awt.Toolkit;
 import java.awt.event.AWTEventListener;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.event.WindowListener;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -44,6 +47,7 @@ import java.util.StringTokenizer;
 
 /* Swing framework API's */
 import javax.swing.DefaultListModel;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
@@ -94,13 +98,11 @@ public class TuringClientUI {
 	private static JMenuBar menuBar;
 	private static JMenu mnFile;
 	private static JMenu mnAccount;
-	private static JMenu mnHelp;
 	private static JMenuItem mntmNew;
 	private static JMenuItem mntmList;
 	private static JMenuItem mntmRegister;
 	private static JMenuItem mntmLogin;
 	private static JMenuItem mntmLogout;
-	private static JMenuItem mntmUsage;
 	private static JMenuItem mntmEdit;
 	private static JMenuItem mntmShowSection;
 	private static JMenuItem mntmShow;
@@ -114,7 +116,7 @@ public class TuringClientUI {
 			public void run() {
 				documents = new HashMap<String, Integer>();
 				try {
-					UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); 
+					UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
 					initGUI();
 					CLIENT_STATUS = Config.OFFLINE;
 					mainFrame.setVisible(true);
@@ -130,7 +132,8 @@ public class TuringClientUI {
 	 *******************************************/
 	private static void initGUI() {		
 		mainFrame = new JFrame("TURING");
-		mainFrame.setBounds(100, 100, 768, 768);
+		mainFrame.setBounds(100, 100, 720, 640);
+		mainFrame.setMinimumSize(new Dimension(720, 640));
 		mainFrame.setResizable(false);
 		mainFrame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 		mainFrame.addWindowListener(new WindowAdapter() {
@@ -173,46 +176,79 @@ public class TuringClientUI {
 		mainFrame.getContentPane().add(panel, BorderLayout.CENTER);
 		panel.setLayout(null);
 		chat_history = new JTextArea();
-		chat_history.setBounds(10, 11, 575, 555);
+		chat_history.setBorder(null);
+		chat_history.setEnabled(false);
+		chat_history.setToolTipText("");
+		chat_history.setBounds(10, 11, 555, 470);
 		chat_history.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 13));
 		chat_history.setEditable(false);
 		chat_history.setTabSize(4);
 		chat_history.setLineWrap(true);
 		chat_history.setColumns(2);
-		chat_history.setPreferredSize(new Dimension(320, 400));
 		chat_history.setAutoscrolls(true);
-		chat_history.setEnabled(false);
 		chat_history.setBackground(Color.LIGHT_GRAY);
 		panel.add(chat_history);
 		
 		btnSend = new JButton("Send");
-		btnSend.setBounds(595, 577, 100, 45);
+		btnSend.setFont(new Font("Microsoft JhengHei UI", Font.BOLD, 11));
+		btnSend.setBounds(575, 500, 100, 30);
 		panel.add(btnSend);
 		btnSend.setEnabled(false);
 		btnSend.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
+				if ( message_box.getText() == null) { return; } // do nothing 
 				String text = userName + ": ";
 				text = text.concat(new String(message_box.getText()));
-				byte[] buffer = new byte[256];
+				byte[] buffer = new byte[Config.DATAGRAM_PKT_SIZE];
 				try {
 					buffer = text.getBytes(Config.DEFAULT_ENCODING);
 					DatagramPacket packet = new DatagramPacket(buffer, buffer.length, chatAddress, Config.CHAT_SERVICE_PORT);
 					chatSocket.send(packet);
+					message_box.setText(null);
 				} catch (IOException e) {e.printStackTrace();}
 			}
 		});
 		
 		message_box = new JTextField();
-		message_box.setBounds(10, 577, 575, 100);
+		message_box.setBorder(null);
+		message_box.setBounds(10, 500, 555, 60);
 		message_box.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 11));
-		message_box.setPreferredSize(new Dimension(320, 100));
-		panel.add(message_box);
+		message_box.setPreferredSize(new Dimension(320, 60));
+		message_box.setEditable(true);
 		message_box.setEnabled(false);
 		message_box.setBackground(Color.LIGHT_GRAY);
+		message_box.addKeyListener(new KeyListener() {
+			public void keyPressed(KeyEvent arg0) {	
+				if ( message_box.getText() == null) { return; } // do nothing 
+				if (arg0.getKeyCode() == KeyEvent.VK_ENTER) {
+					String text = userName + ": ";
+					text = text.concat(new String(message_box.getText()));
+					byte[] buffer = new byte[Config.DATAGRAM_PKT_SIZE];
+					try {
+						buffer = text.getBytes(Config.DEFAULT_ENCODING);
+						DatagramPacket packet = new DatagramPacket(buffer, buffer.length, chatAddress, Config.CHAT_SERVICE_PORT);
+						chatSocket.send(packet);
+						message_box.setText(null);
+					} catch (IOException e) {e.printStackTrace();}
+				}
+			}
+
+			@Override
+			public void keyReleased(KeyEvent arg0) {
+			}
+
+			@Override
+			public void keyTyped(KeyEvent arg0) {
+			}
+			
+		});
+		panel.add(message_box);
+		
 		statusBar = new JTextField();
-		statusBar.setBounds(0, 700, 784, 20);
+		statusBar.setFont(new Font("Microsoft JhengHei UI", Font.BOLD, 11));
+		statusBar.setBounds(0, 570, 714, 20);
 		statusBar.setBackground(Color.LIGHT_GRAY);
-		statusBar.setText("Guest - Offline");
+		statusBar.setText("Offline");
 		statusBar.setColumns(10);
 		statusBar.setEditable(false);
 		panel.add(statusBar);
@@ -233,6 +269,7 @@ public class TuringClientUI {
 			}
 		});
 		mntmNew.setEnabled(false);
+		mntmNew.setIcon(new ImageIcon(TuringClientUI.class.getResource("/icons/newdoc_icon.png")));
 		mnFile.add(mntmNew);
 		
 		mntmList = new JMenuItem("List");
@@ -242,12 +279,14 @@ public class TuringClientUI {
 			}
 		});
 		mntmList.setEnabled(false);
+		mntmList.setIcon(new ImageIcon(TuringClientUI.class.getResource("/icons/listdoc_icon.png")));
 		mnFile.add(mntmList);
 		
 		mnAccount = new JMenu("Account");
 		menuBar.add(mnAccount);
 		
 		mntmRegister = new JMenuItem("Register");
+		mntmRegister.setIcon(new ImageIcon(TuringClientUI.class.getResource("/icons/register_icon.png")));
 		mntmRegister.addActionListener(new ActionListener() { // REGISTER menu listener
 			public void actionPerformed(ActionEvent evt) {
 				registerActionPerformed();
@@ -256,6 +295,7 @@ public class TuringClientUI {
 		mnAccount.add(mntmRegister);
 		
 		mntmLogin = new JMenuItem("Login");
+		mntmLogin.setIcon(new ImageIcon(TuringClientUI.class.getResource("/icons/login_icon.png")));
 		mntmLogin.addActionListener(new ActionListener() { // LOGIN menu listener
 			public void actionPerformed(ActionEvent evt) {
 				loginActionPerformed();
@@ -264,6 +304,7 @@ public class TuringClientUI {
 		mnAccount.add(mntmLogin);
 		
 		mntmLogout = new JMenuItem("Logout");
+		mntmLogout.setIcon(new ImageIcon(TuringClientUI.class.getResource("/icons/logout_icon.png")));
 		mntmLogout.addActionListener(new ActionListener() { // LOGOUT menu listener
 			public void actionPerformed(ActionEvent evt) {
 				logoutActionPerformed();
@@ -272,11 +313,6 @@ public class TuringClientUI {
 		mnAccount.add(mntmLogout);
 		mntmLogout.setEnabled(false);
 		
-		mnHelp = new JMenu("Help");
-		menuBar.add(mnHelp);
-		
-		mntmUsage = new JMenuItem("Usage");
-		mnHelp.add(mntmUsage);
 	}
 	
 	/************************
@@ -660,6 +696,16 @@ public class TuringClientUI {
 	private static JDialog fileExplorer() {
 		JDialog dialog = new JDialog(mainFrame, "My files");
 		JPanel panel = new JPanel();
+		JButton btnUpdate = new JButton("Refresh");
+	
+		btnUpdate.addActionListener(new ActionListener() {
+
+			public void actionPerformed(ActionEvent arg0) {
+				dialog.dispose();
+				listActionPerformed();
+			}
+			
+		});
 		
 		dialog.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 		dialog.addWindowListener(new WindowAdapter() {
@@ -671,9 +717,13 @@ public class TuringClientUI {
 		});
 		
 		mntmEdit = new JMenuItem("Edit section");
+		mntmEdit.setIcon(new ImageIcon(TuringClientUI.class.getResource("/icons/editdoc_icon.png")));
 		mntmShowSection = new JMenuItem("Show section");
+		mntmShowSection.setIcon(new ImageIcon(TuringClientUI.class.getResource("/icons/showsect_icon.png")));
 		mntmShow = new JMenuItem("Show document");
+		mntmShow.setIcon(new ImageIcon(TuringClientUI.class.getResource("/icons/showdoc_icon.png")));
 		mntmShare = new JMenuItem("Share document");
+		mntmShare.setIcon(new ImageIcon(TuringClientUI.class.getResource("/icons/sharedoc_icon.png")));
 		
 		dialog.setSize(320, 240);
 		dialog.setResizable(true);
@@ -753,25 +803,28 @@ public class TuringClientUI {
 		});
 				
 		panel.add(explorer_scroll);
+		panel.add(btnUpdate, BorderLayout.SOUTH);
 		dialog.getContentPane().add(panel);
 		
 		return dialog;
 	}
 	
-	private static JDialog fileEditor(String filename, String text, int section) {
-		final JDialog dialog = new JDialog(mainFrame, filename);
+	private static JFrame fileEditor(String filename, String text, int section) {
+		final JFrame frame = new JFrame(filename);
 		final JMenuBar menu_bar = new JMenuBar();
 		final JMenu mnFile = new JMenu("File");
 		final JMenuItem mntmSave = new JMenuItem("Save");
 		final JTextArea textArea = new JTextArea();
 		final JScrollPane textScroll = new JScrollPane(textArea);
 		
-		dialog.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-		dialog.addWindowListener(new WindowAdapter() {
+		mntmSave.setIcon(new ImageIcon(TuringClientUI.class.getResource("/icons/savedoc_icon.png")));
+		
+		frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+		frame.addWindowListener(new WindowAdapter() {
 			@Override
             public void windowClosing(WindowEvent e) {
 				int confirm;
-				confirm = JOptionPane.showConfirmDialog(dialog, 
+				confirm = JOptionPane.showConfirmDialog(frame, 
 						"Do you really want to exit? Any unsaved action will be lost",
 						"Exit edit mode",
 						JOptionPane.YES_NO_OPTION,
@@ -780,12 +833,13 @@ public class TuringClientUI {
 					try {
 						endEditRequest(filename, section);
 					} catch (UnsupportedEncodingException ue) {ue.printStackTrace();}
-					dialog.dispose();
+					frame.dispose();
 					CLIENT_STATUS = Config.ONLINE;
 				}
 			}
 		});		
-		dialog.setSize(new Dimension(800, 600));
+		frame.setSize(new Dimension(800, 600));
+		frame.setResizable(true);
 		
 		menu_bar.add(mnFile);
 		mnFile.add(mntmSave);
@@ -805,10 +859,10 @@ public class TuringClientUI {
 					updateSectionRequest(filename, text, section);
 					byte r = getResponse(client_ch);
 					if ( r != Config.SUCCESS) { // saving file failed
-						JOptionPane.showMessageDialog(dialog, "Error saving file: " + Config.ERROR_LOG(r));
+						JOptionPane.showMessageDialog(frame, "Error saving file: " + Config.ERROR_LOG(r));
 					}
 					else {
-						JOptionPane.showMessageDialog(dialog, "File saved successfully!");
+						JOptionPane.showMessageDialog(frame, "File saved successfully!");
 					}
 				} catch (IOException e) {
 					e.printStackTrace();
@@ -816,9 +870,9 @@ public class TuringClientUI {
 			}
 		});
 		
-		dialog.setJMenuBar(menu_bar);
-		dialog.getContentPane().add(textScroll);
-		return dialog;
+		frame.setJMenuBar(menu_bar);
+		frame.getContentPane().add(textScroll);
+		return frame;
 	}
 
 	private static JPopupMenu editSectionPopupMenu(String filename, int sections) {
@@ -849,7 +903,7 @@ public class TuringClientUI {
 					text = downloadRequest(filename, s, Config.EDIT_R);
 					if (text != null) {
 						System.out.println("File downloaded, " + text.getBytes().length);
-						JDialog editor = fileEditor(filename, text, s);
+						JFrame editor = fileEditor(filename, text, s);
 						System.out.println("Editor instance created...");
 						editor.setLocation(mainFrame.getX() + mainFrame.getWidth(), mainFrame.getY());
 						editor.setVisible(true);
@@ -1026,9 +1080,9 @@ public class TuringClientUI {
 	/* Sends a request to the server to receive the list of proprietary and shared files */
 	private static ArrayList<String> listDocsRequest() throws UnsupportedEncodingException {
 		if (!serverOnline()) {
-		JOptionPane.showMessageDialog(mainFrame, "Server currently offline, try again later");
-		return null;
-	}
+			JOptionPane.showMessageDialog(mainFrame, "Server currently offline, try again later");
+			return null;
+		}
 	
 		ByteBuffer buffer = ByteBuffer.allocate(Config.BUF_SIZE);
 		byte name_size = (byte) userName.length();
@@ -1233,13 +1287,13 @@ public class TuringClientUI {
 		}
 	}
 	
-	/* Sends a request to the server to open a notification service channel for this session */
+	/* Sends a request to the server to start the notification service for this session */
 	private static void notifyServiceStartRequest(String username) {
 		try {
 			ByteBuffer request = ByteBuffer.allocate(Config.BUF_SIZE);
 			byte name_size = (byte) username.length();
 				
-			request.put(Config.NOTIFY_R);
+			request.put(Config.NOTIFY_SERV_R);
 			request.put(name_size);
 			request.put(username.getBytes(Config.DEFAULT_ENCODING));
 			request.flip();
@@ -1373,8 +1427,8 @@ public class TuringClientUI {
 		chat_history.setEnabled(false);
 		message_box.setEnabled(false);
 		btnSend.setEnabled(false);
-		chat_history.setBackground(Color.GRAY);
-		message_box.setBackground(Color.GRAY);
+		chat_history.setBackground(Color.LIGHT_GRAY);
+		message_box.setBackground(Color.LIGHT_GRAY);
 	}
 
 	/* Returns true if mouse points outside of the given region */
@@ -1415,5 +1469,4 @@ public class TuringClientUI {
 
 	    }
 	}
-	
 }

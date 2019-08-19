@@ -1,6 +1,5 @@
 package turing_pkg;
 
-import java.awt.Color;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
@@ -37,10 +36,7 @@ public class MulticastReceiver extends Thread {
 				try { socket.receive(packet); } catch (SocketException sock_ex) { System.out.println("Chat socket closed"); }
 				String message = new String(packet.getData(), 0, packet.getLength());
 				if (message.isEmpty()) break;
-				String data[] = message.split(": ");
-				System.out.println(data[0] + message.substring(data[0].length() + 2));
-				chat_box.append(data[0] + ": " + message.substring(data[0].length()+1) + "\n");
-				chat_box.setSelectedTextColor(Color.BLUE);
+				chat_box.append(message + "\n");
 			}
 		} catch (IOException e) { e.printStackTrace(); }
 	}

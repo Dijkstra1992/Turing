@@ -9,6 +9,7 @@ final class Config {
 	
 	/* configuration values */
 	public static final int BUF_SIZE		 	 	= 4096;
+	public static final int DATAGRAM_PKT_SIZE		= 512;
 	public static final int SERVER_PORT 		 	= 3026;
 	public static final int REMOTE_SERVICE_PORT	 	= 3027;
 	public static final int CHAT_SERVICE_PORT	 	= 3028;
@@ -29,7 +30,7 @@ final class Config {
 	public static final byte LIST_R			= (byte) 0x070; 		// lists all proprietary/shared files
 	public static final byte SHOW_R		 	= (byte) 0x071; 		// download section request
 	public static final byte SAVE_R			= (byte) 0x072; 		// save edited section request
-	public static final byte NOTIFY_R		= (byte) 0x073;			// notification service start request
+	public static final byte NOTIFY_SERV_R  = (byte) 0x073;			// notification service start request
 	
 		
 	/* errors and messages codification */

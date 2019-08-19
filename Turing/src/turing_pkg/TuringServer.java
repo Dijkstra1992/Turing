@@ -3,6 +3,8 @@ package turing_pkg;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
@@ -310,7 +312,7 @@ public class TuringServer {
 				break;
 				
 			/* sets up a notification channel for the client */
-			case Config.NOTIFY_R:
+			case Config.NOTIFY_SERV_R:
 				user_s = buffer.get();
 				username = new byte[user_s];
 				buffer.get(username, 0, user_s);
@@ -631,7 +633,18 @@ public class TuringServer {
 			chatGroups.put(filename, group);
 			System.out.println("New group created");
 		}
-		sendAddress(client, group_address);
+		sendAddress(client, group_address); // send chat group address to the client
+		/* notify all users in this group that 'username' joined the work group*/
+		try {
+			DatagramSocket socket = new DatagramSocket();
+			InetAddress address = InetAddress.getByName(group_address);
+			String text = "'" + username + "' joined group\n";
+			byte[] buffer = new byte[256];
+			buffer = text.getBytes(Config.DEFAULT_ENCODING);
+			DatagramPacket packet = new DatagramPacket(buffer, buffer.length, address, Config.CHAT_SERVICE_PORT);
+			socket.send(packet);
+			socket.close();
+		} catch (IOException io_ex) { io_ex.printStackTrace(); }
 	}
 	
 	private static void removeUserFromGroup(String username, String filename) {
@@ -640,6 +653,21 @@ public class TuringServer {
 		if (group.openSections == 0) {
 			chatGroups.remove(filename);
 		}
+		/* notify all users in this group (if exists any) that 'username' left the work group*/
+		if (chatGroups.containsKey(filename)) {
+			String group_address = chatGroups.get(filename).groupAddress;
+			try {
+				DatagramSocket socket = new DatagramSocket();
+				InetAddress address = InetAddress.getByName(group_address);
+				String text = "'" + username + "' left group\n";
+				byte[] buffer = new byte[256];
+				buffer = text.getBytes(Config.DEFAULT_ENCODING);
+				DatagramPacket packet = new DatagramPacket(buffer, buffer.length, address, Config.CHAT_SERVICE_PORT);
+				socket.send(packet);
+				socket.close();
+			} catch (IOException io_ex) { io_ex.printStackTrace(); }
+		}
+		
 	}
 	
 	private static String getFreeChatGroupAddress() {
@@ -682,10 +710,12 @@ public class TuringServer {
 	private static void sendNotification(SocketChannel client, String message) {
 		try {	
 			ByteBuffer buffer = ByteBuffer.allocate(Config.BUF_SIZE);
+			buffer.putInt(message.getBytes().length);
 			buffer.put(message.getBytes(Config.DEFAULT_ENCODING));
 			buffer.flip();
 			client.write(buffer);
 			System.out.println("Notification sent to " + client.getRemoteAddress() + "\n\t->" + message);
 		} catch (IOException io_ex) {io_ex.printStackTrace();}
 	}
+	
 }

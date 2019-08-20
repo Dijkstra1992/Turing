@@ -22,7 +22,6 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.awt.event.WindowListener;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -698,7 +697,7 @@ public class TuringClientUI {
 		JPanel panel = new JPanel();
 		JButton btnUpdate = new JButton("Refresh");
 	
-		btnUpdate.addActionListener(new ActionListener() {
+		btnUpdate.addActionListener(new ActionListener() { // refresh files list
 
 			public void actionPerformed(ActionEvent arg0) {
 				dialog.dispose();
@@ -711,7 +710,7 @@ public class TuringClientUI {
 		dialog.addWindowListener(new WindowAdapter() {
 			@Override
 			public void windowClosing(WindowEvent e) {
-				mntmList.setEnabled(true);
+				mntmList.setEnabled(false);
 				dialog.dispose();
 			}
 		});
@@ -754,13 +753,7 @@ public class TuringClientUI {
 			}
 		});
 		
-		/* adding popup menu item triggers */
-		mntmShare.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent evt) {
-				shareActionPerformed(list.getElementAt(file_explorer.getSelectedIndex()));
-			}
-		});
-				
+		/* adding popup menu item triggers */				
 		mntmEdit.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
 				String selected_file = new String(file_explorer.getSelectedValue());
@@ -799,6 +792,12 @@ public class TuringClientUI {
 					viewer.setVisible(true);
 				}
 				catch (IOException ex) {ex.printStackTrace();}
+			}
+		});
+		
+		mntmShare.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent evt) {
+				shareActionPerformed(list.getElementAt(file_explorer.getSelectedIndex()));
 			}
 		});
 				
@@ -893,7 +892,7 @@ public class TuringClientUI {
 				if (CLIENT_STATUS == Config.EDITING) {
 					JOptionPane.showMessageDialog(
 							mainFrame,
-							"You need to close current editing session before starting a new one");
+							"Need to close current editing session first!");
 					return;
 				}
 				
@@ -902,17 +901,13 @@ public class TuringClientUI {
 				try {
 					text = downloadRequest(filename, s, Config.EDIT_R);
 					if (text != null) {
-						System.out.println("File downloaded, " + text.getBytes().length);
 						JFrame editor = fileEditor(filename, text, s);
-						System.out.println("Editor instance created...");
 						editor.setLocation(mainFrame.getX() + mainFrame.getWidth(), mainFrame.getY());
 						editor.setVisible(true);
 						CLIENT_STATUS = Config.EDITING;
 						String chat_address = getGroupAddress();
-						System.out.println("Retrieved group address: " + chat_address);
 						chatAddress = InetAddress.getByName(chat_address);
 						enableChat();
-						System.out.println("Chat service enabled!");
 					} 
 					popupMenu.setVisible(false);	
 				} catch (UnsupportedEncodingException enc_e) {
@@ -1221,8 +1216,9 @@ public class TuringClientUI {
 				
 		r_code = data.get();
 		if (r_code == Config.IN_EDIT) {
-			byte[] editing_user_b = new byte[data.remaining()];
-			data.get(editing_user_b, 0, data.remaining());
+			int editor_name_s = data.getInt();
+			byte[] editing_user_b = new byte[editor_name_s];
+			data.get(editing_user_b, 0, editor_name_s);
 			String editing_user = new String(editing_user_b, Config.DEFAULT_ENCODING);
 			JOptionPane.showMessageDialog(mainFrame, "File currently in edit by user: " + editing_user);
 			return null;

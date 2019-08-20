@@ -256,9 +256,12 @@ public class TuringServer {
 				currentUser = usersDB.get(user);
 				currentDoc = currentUser.getDocument(file);
 				System.out.println("EDIT_R: " + user);
-				if (currentDoc.getStatus(section) == Config.IN_EDIT) {
+				if (currentDoc.getStatus(section) == Config.IN_EDIT) { // file section currently in edit by other user
+					byte[] editor = (editingSessions.get(file + "_" + section)).getBytes(Config.DEFAULT_ENCODING);
 					ByteBuffer response = ByteBuffer.allocate(Config.BUF_SIZE);
 					response.put(Config.IN_EDIT);
+					response.putInt(editor.length);
+					response.put(editor);
 					response.flip();
 					try {
 						client.write(response);
@@ -320,7 +323,6 @@ public class TuringServer {
 				System.out.println("[NOTIFY_R]: " +  user);
 				User current_user = usersDB.get(user);
 				current_user.addNotificationChannel(client);
-				System.out.println("Added notification address: " + client.getRemoteAddress() + " to user " + user);
 				sendResponse(client, Config.SUCCESS);
 				/* if user had offline notifications, send them now */
 				if (pendingNotifications.containsKey(user)) {
@@ -332,6 +334,7 @@ public class TuringServer {
 					sendNotification(client, message);
 					pendingNotifications.remove(user);
 				}
+				System.out.println("NOTIFY_R: " + user);
 				break;
 				
 			default	: 

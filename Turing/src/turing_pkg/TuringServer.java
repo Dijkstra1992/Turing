@@ -13,7 +13,9 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -24,9 +26,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 
 /* my utility class */
@@ -36,12 +39,14 @@ public class TuringServer {
 	
 	/* Users database structure */ 
 	public static Map<String, User> usersDB; 	 						// registered users (<username, User>)
+	public static Lock dbLock;
 	private static Map<String, SocketChannel> loggedUsers;				// online users (<username, client_socket_channel>)
 	private static Map<String, String> editingSessions;					// list of currently open sections for editing (<file_section_name, username>)
 	private static Map<String, ChatGroup> chatGroups;					// for chat groups managing (<filename, chatgroup object>)
 	private static Map<String, ArrayList<String>> pendingNotifications;	// <username, notification_messages_list>
 	private static ServerSocketChannel server_ch = null;
 	private static Selector ch_selector = null;
+	
 	
 	public static void main(String[] args) throws InterruptedException, IOException {
 		
@@ -56,13 +61,19 @@ public class TuringServer {
 		} catch (Exception e) { e.printStackTrace(); }
 		
 		/* Data structures initialization */
+		dbLock = new ReentrantLock();
 		usersDB = new HashMap<String, User>();
 		loggedUsers = new HashMap<String, SocketChannel>(); 
 		editingSessions = new HashMap<String, String>();
 		chatGroups = new HashMap<String, ChatGroup>();
 		pendingNotifications = new HashMap<String, ArrayList<String>>();
 
-		/* Remote service export (RMI - account registration service) */
+		/* Clean up any existing files from previous executions */
+		System.out.println("Cleaning previous execution files...");
+		cleanUpUtility(Paths.get(Config.FILE_PATH));
+		System.out.println("Done!");
+		
+		/* Remote service export (RMI - new account registration service) */
 		TuringRemoteRegisterOP remote_service = new TuringRemoteRegisterOP();
 		TuringRemoteService stub = (TuringRemoteService) UnicastRemoteObject.exportObject(remote_service, Config.REMOTE_SERVICE_PORT);
 		LocateRegistry.createRegistry(Config.REMOTE_SERVICE_PORT);
@@ -104,10 +115,6 @@ public class TuringServer {
 							encode_ex.printStackTrace();
 						}
 						catch (IOException io_ex) { // client closed connection
-							if (loggedUsers.containsValue(client)) {
-								closeSession(client);
-								System.out.println(client.getRemoteAddress() + " -> " + io_ex.getLocalizedMessage());
-							}
 							client.close();
 							ready_key.cancel();
 						}
@@ -121,6 +128,7 @@ public class TuringServer {
 		} 
 	}
 
+	/* Reds incoming request message from 'client' SocketChannel and calls the corresponding serving function */
 	private static void readRequest(SocketChannel client, ByteBuffer request) throws Exception {
 
 		ByteBuffer buffer = null;
@@ -253,7 +261,9 @@ public class TuringServer {
 			    section = buffer.getInt();
 			    user = new String(username, Config.DEFAULT_ENCODING);
 				file = new String(file_name, Config.DEFAULT_ENCODING);
+				dbLock.lock();
 				currentUser = usersDB.get(user);
+				dbLock.unlock();
 				currentDoc = currentUser.getDocument(file);
 				System.out.println("EDIT_R: " + user);
 				if (currentDoc.getStatus(section) == Config.IN_EDIT) { // file section currently in edit by other user
@@ -289,7 +299,9 @@ public class TuringServer {
 			    buffer.get(file_name, 0, file_name_s);
 			    user = new String(username, Config.DEFAULT_ENCODING);
 				file = new String(file_name, Config.DEFAULT_ENCODING);
+				dbLock.lock();
 				currentUser = usersDB.get(user); 
+				dbLock.unlock();
 				currentDoc = currentUser.getDocument(file);
 				currentDoc.setStatus(Config.FREE_SECTION, section);
 				System.out.println("END_EDIT_R: " + user);
@@ -321,7 +333,9 @@ public class TuringServer {
 				buffer.get(username, 0, user_s);
 				user = new String(username, Config.DEFAULT_ENCODING);
 				System.out.println("[NOTIFY_R]: " +  user);
+				dbLock.lock();
 				User current_user = usersDB.get(user);
+				dbLock.unlock();
 				current_user.addNotificationChannel(client);
 				sendResponse(client, Config.SUCCESS);
 				/* if user had offline notifications, send them now */
@@ -343,10 +357,13 @@ public class TuringServer {
 		}
 	}
 	
+	/* User login */
 	private static void loginUser(SocketChannel client, String username, char[] password) {
 		
 		// checking if user is registered
+		dbLock.lock();
 		if ( !usersDB.containsKey(username) ) {
+			dbLock.unlock();
 			System.out.println("UKNOWN USERNAME [" + username + "]");
 			sendResponse(client, Config.UNKNOWN_USER);
 			return;
@@ -354,6 +371,7 @@ public class TuringServer {
 		
 		// checking password validity
 		User user = usersDB.get(username);
+		dbLock.unlock();
 		char[] pass = user.getPass();
 	
 		for (int i=0; i<password.length; i++) {
@@ -375,6 +393,7 @@ public class TuringServer {
 		
 	}
 	
+	/* Creates a new file */
 	private static void newDocCreate(SocketChannel client, String username, String filename, int sections) {
 		
 		// check if user is already online
@@ -399,19 +418,24 @@ public class TuringServer {
 		}
 		
 		System.out.println("File " + pathName + " created");
+		dbLock.lock();
 		User user = usersDB.get(username);
+		dbLock.unlock();
 		Document document = new Document(filename, username, sections, Config.CREATOR);
 		user.addFile(document);
 		sendResponse(client, Config.SUCCESS);
 	}
 	
+	/* Sends a list of all proprietary and authorized documents for this user */
 	private static void listDocs(SocketChannel client, String username) {
 		if ( !loggedUsers.containsKey(username)) {
 			sendResponse(client, Config.UNKNOWN_USER);
 			return;
 		}
 		
+		dbLock.lock();
 		User user = usersDB.get(username);
+		dbLock.unlock();
 		Iterator<Document> it = user.getFileIterator();
 		if (!it.hasNext()) { //empty documents list
 			sendResponse(client, Config.EMPTY_LIST);
@@ -441,6 +465,7 @@ public class TuringServer {
 		}		
 	}
 	
+	/* Adds document 'file' to receivers documents list */
 	private static void shareDoc(SocketChannel client, String sender, String receiver, String file) {
 		
 		if (sender.equals(receiver)) { 
@@ -448,7 +473,9 @@ public class TuringServer {
 			return;
 		}
 		
+		dbLock.lock();
 		User recvr = usersDB.get(receiver);
+		dbLock.unlock();
 		if ( recvr == null) { 
 			sendResponse(client, Config.UNKNOWN_USER);
 			return;
@@ -459,7 +486,9 @@ public class TuringServer {
 			return;
 		}
 		
+		dbLock.lock();
 		User sendr = usersDB.get(sender);
+		dbLock.unlock();
 		Document source = sendr.getDocument(file);
 		if (source == null) {
 			sendResponse(client, Config.NO_SUCH_FILE);
@@ -480,16 +509,19 @@ public class TuringServer {
 				pendingNotifications.put(receiver, notifications_list);
 			}
 		} else { // send notification directly to receiver if online
-			User rcv = usersDB.get(receiver);
-			SocketChannel notify_ch = rcv.getNotificationChannel();
+			
+			SocketChannel notify_ch = recvr.getNotificationChannel();
 			sendNotification(notify_ch, message);
 		}
 		
 		return;
 	}
 
+	/* Sends file 'filename' to user 'username' */
 	private static void sendFile(SocketChannel client, String username, String filename, int section_number) {
+		dbLock.lock();
 		User user = usersDB.get(username);
+		dbLock.unlock();
 		Document doc = user.getDocument(filename);
 		String text = null;	
 		
@@ -519,9 +551,12 @@ public class TuringServer {
 		}
 	}
 	
+	/* Save a new version of file 'filename' on disk*/
 	private static void updateFile(SocketChannel client, String username, String filename, byte[] file_text, int section) {
 
+		dbLock.lock();
 		User user = usersDB.get(username);
+		dbLock.unlock();
 		Document document = user.getDocument(filename);
 		String owner = new String(document.getOwner());
 		
@@ -538,6 +573,7 @@ public class TuringServer {
 		sendResponse(client, Config.SUCCESS);
 	}
 	
+	/* Loads file 'filename' from disk */
 	private static String loadFile(Document doc, String username, String filename) {
 		try {
 			String pathName = new String(Config.FILE_PATH + username + "\\" + filename);
@@ -566,6 +602,7 @@ public class TuringServer {
 		}
 	}
 	
+	/* Loads section 'section_n' of file 'filename' from disk */
 	private static String loadFileSection(Document doc, String username, String filename, int section_n) {
 		String pathName = new String(Config.FILE_PATH + username + "\\" + filename);
 		Path filePath = Paths.get(pathName + "\\" + filename + "_" + Integer.toString(section_n) + ".txt");
@@ -582,6 +619,7 @@ public class TuringServer {
 		return text;
 	}
 	
+	/* Sends an operation response code to this 'client' */
 	private static void sendResponse(SocketChannel client, byte outcome) {
 		
 		ByteBuffer response = ByteBuffer.allocate(1);
@@ -595,33 +633,7 @@ public class TuringServer {
 		
 	}
 	
-	private static void closeSession(SocketChannel client) {
-		
-		Set<Entry<String, SocketChannel>> usersSet = loggedUsers.entrySet();
-		Iterator<Entry<String, SocketChannel>> it = usersSet.iterator();
-		while (it.hasNext()) {
-			Entry<String, SocketChannel> current = (Entry<String, SocketChannel>) it.next();
-			if (current.getValue().equals(client)) {
-				String username = new String(current.getKey());
-				loggedUsers.remove(username);
-				try {
-					User current_user = usersDB.get(username);
-					if (current_user.hasOpenSessions()) { // client crashed while in edit-mode ==> clean session & free document section
-						String session_name = new String(current_user.getOpenSessionName());
-						int session_index = current_user.getOpenSessionIndex();
-						current_user.getDocument(session_name).setStatus(Config.FREE_SECTION, session_index); // release document section
-						current_user.setSessionStatus(null, -1);		// clean user session status
-						editingSessions.remove(session_name + "_" + session_index);	// remove user from active editing sessions list
-						ChatGroup group = chatGroups.get(session_name); 
-						group.removeUser(username);						// remove user from chat group 
-					}
-					current_user.getNotificationChannel().close();		// close user notification channel 
-				} catch (IOException io_ex) { io_ex.printStackTrace(); }
-				return;
-			}
-		}
-	}
-	
+	/* Adds user 'username' to correspondig chat group */
 	private static void putUserInGroup(SocketChannel client, String filename, String username) {
 		String group_address;
 		if (chatGroups.containsKey(filename)) {
@@ -650,6 +662,7 @@ public class TuringServer {
 		} catch (IOException io_ex) { io_ex.printStackTrace(); }
 	}
 	
+	/* Removes user 'username' from the chat group he was previously added to*/
 	private static void removeUserFromGroup(String username, String filename) {
 		ChatGroup group = chatGroups.get(filename);
 		group.removeUser(username);
@@ -673,28 +686,28 @@ public class TuringServer {
 		
 	}
 	
+	/* Generates a new random UDP Multicast address */
 	private static String getFreeChatGroupAddress() {
-		String rnd_generated = "226.";	// Class D address for UDP based Multicast service
+		String rnd_generated = "239.255.";	// Class D address for UDP based Multicast service
 		Random r = new Random();
-		rnd_generated = rnd_generated.concat(r.nextInt(256) + "." + r.nextInt(256) + "." + r.nextInt(256));
-		System.out.println("Generated address: " + rnd_generated);
+		rnd_generated = rnd_generated.concat(r.nextInt(256) + "." + r.nextInt(256));
 		try {
 			InetAddress address = InetAddress.getByName(rnd_generated);
 			if (address.isReachable(10)) {
-				System.out.println("Address already in use");
 				return null;
 			}
 		} catch (UnknownHostException e) {
-			System.out.println("Invalid address");
+			System.out.println("Invalid UDP multicast address");
 			return null;
 		} catch (IOException e) {
-			System.out.println("Invalid address");
+			System.out.println("Invalid UDP multicast address");
 			return null;
 		}
 		
 		return rnd_generated;
 	}
 	
+	/* Sends an 'address' to 'client' as a String */
 	private static void sendAddress(SocketChannel client, String address) {
 		
 		try {
@@ -710,6 +723,7 @@ public class TuringServer {
 		}
 	}
 
+	/* Sends a notification message to 'client' */
 	private static void sendNotification(SocketChannel client, String message) {
 		try {	
 			ByteBuffer buffer = ByteBuffer.allocate(Config.BUF_SIZE);
@@ -721,4 +735,18 @@ public class TuringServer {
 		} catch (IOException io_ex) {io_ex.printStackTrace();}
 	}
 	
+	/* Recursively deletes all folders & files up to 'path' folder */
+	private static void cleanUpUtility(Path path) throws IOException {
+		
+		if (Files.exists(path)) {
+			if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+				try (DirectoryStream<Path> entries = Files.newDirectoryStream(path)) {
+					for (Path entry : entries) {
+						cleanUpUtility(entry);
+					}
+			    }
+			}
+			Files.delete(path);
+		}
+	}
 }

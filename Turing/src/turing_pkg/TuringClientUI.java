@@ -83,9 +83,12 @@ public class TuringClientUI {
 	private static MulticastReceiver mc_receiver;
 	private static Thread notification_handler = null;
 	private static byte CLIENT_STATUS;
+	private static String session_name;
+	private static int session_index;
 	
 	/* UI components */
 	private static JFrame mainFrame;
+	private static JFrame editorWindow;
 	private static JPanel panel;
 	private static JTextField statusBar;
 	private static JTextArea chat_history;
@@ -126,14 +129,14 @@ public class TuringClientUI {
 		});
 	}
 
-	/*******************************************
-	 * Initialize GUI
-	 *******************************************/
+	/**********************************************
+	 * Initialize Graphic User Interface components
+	 **********************************************/
 	private static void initGUI() {		
 		mainFrame = new JFrame("TURING");
+		mainFrame.setResizable(false);
 		mainFrame.setBounds(100, 100, 720, 640);
 		mainFrame.setMinimumSize(new Dimension(720, 640));
-		mainFrame.setResizable(false);
 		mainFrame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 		mainFrame.addWindowListener(new WindowAdapter() {
 			@Override
@@ -146,7 +149,11 @@ public class TuringClientUI {
 							JOptionPane.YES_NO_OPTION,
 							JOptionPane.QUESTION_MESSAGE);
 					if ( selection == JOptionPane.YES_OPTION ) {
-						try {logoutRequest(); } catch (IOException io_ex) { io_ex.printStackTrace(); }
+						try {
+							endEditRequest(session_name, session_index);
+							logoutRequest(); 
+						} catch (IOException io_ex) { io_ex.printStackTrace(); }
+						editorWindow.dispose();
 						mainFrame.dispose();
 						System.out.print("UI components released successfully");
 						return;
@@ -172,6 +179,7 @@ public class TuringClientUI {
 		});
 		
 		panel = new JPanel();
+		panel.setForeground(Color.BLACK);
 		mainFrame.getContentPane().add(panel, BorderLayout.CENTER);
 		panel.setLayout(null);
 		chat_history = new JTextArea();
@@ -195,7 +203,9 @@ public class TuringClientUI {
 		btnSend.setEnabled(false);
 		btnSend.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
-				if ( message_box.getText() == null) { return; } // do nothing 
+				if ( message_box.getText().isEmpty() ) { // do nothing 
+					return; 
+				} 
 				String text = userName + ": ";
 				text = text.concat(new String(message_box.getText()));
 				byte[] buffer = new byte[Config.DATAGRAM_PKT_SIZE];
@@ -218,7 +228,9 @@ public class TuringClientUI {
 		message_box.setBackground(Color.LIGHT_GRAY);
 		message_box.addKeyListener(new KeyListener() {
 			public void keyPressed(KeyEvent arg0) {	
-				if ( message_box.getText() == null) { return; } // do nothing 
+				if ( message_box.getText().isEmpty() ) { // do nothing 
+					return; 
+				} 
 				if (arg0.getKeyCode() == KeyEvent.VK_ENTER) {
 					String text = userName + ": ";
 					text = text.concat(new String(message_box.getText()));
@@ -232,13 +244,8 @@ public class TuringClientUI {
 				}
 			}
 
-			@Override
-			public void keyReleased(KeyEvent arg0) {
-			}
-
-			@Override
-			public void keyTyped(KeyEvent arg0) {
-			}
+			public void keyReleased(KeyEvent arg0) {} // not used
+			public void keyTyped(KeyEvent arg0) {} // not used
 			
 		});
 		panel.add(message_box);
@@ -314,9 +321,9 @@ public class TuringClientUI {
 		
 	}
 	
-	/************************
-	 * event triggers 
-	 ************************/
+	/**************************
+	 * event trigger functions
+	 **************************/
 	private static void registerActionPerformed() {
 		JDialog regDialog = registerDialog();
 		regDialog.setLocationRelativeTo(mainFrame);
@@ -363,7 +370,6 @@ public class TuringClientUI {
 			}
 			listDialog.setLocationRelativeTo(mainFrame);
 			listDialog.setVisible(true);
-			mntmList.setEnabled(false);
 		}
 	}
 	
@@ -710,7 +716,6 @@ public class TuringClientUI {
 		dialog.addWindowListener(new WindowAdapter() {
 			@Override
 			public void windowClosing(WindowEvent e) {
-				mntmList.setEnabled(false);
 				dialog.dispose();
 			}
 		});
@@ -901,13 +906,15 @@ public class TuringClientUI {
 				try {
 					text = downloadRequest(filename, s, Config.EDIT_R);
 					if (text != null) {
-						JFrame editor = fileEditor(filename, text, s);
-						editor.setLocation(mainFrame.getX() + mainFrame.getWidth(), mainFrame.getY());
-						editor.setVisible(true);
+						editorWindow = fileEditor(filename, text, s);
+						editorWindow.setLocation(mainFrame.getX() + mainFrame.getWidth(), mainFrame.getY());
+						editorWindow.setVisible(true);
 						CLIENT_STATUS = Config.EDITING;
 						String chat_address = getGroupAddress();
 						chatAddress = InetAddress.getByName(chat_address);
 						enableChat();
+						session_name = new String(filename);
+						session_index = s;
 					} 
 					popupMenu.setVisible(false);	
 				} catch (UnsupportedEncodingException enc_e) {
@@ -991,7 +998,7 @@ public class TuringClientUI {
 	
 	/******************************************** REQUESTS *************************************************/
 	
-	/* Sends a login request to the server */
+	/* sends a login request to the server */
 	private static void loginRequest(String username, char[] password) throws UnsupportedEncodingException {
 		
 		ByteBuffer request = ByteBuffer.allocate(Config.BUF_SIZE);
@@ -1014,8 +1021,8 @@ public class TuringClientUI {
 		
 	}
 
-	/* Sends a logout request to the server */
-	private static void logoutRequest() throws IOException {
+	/* sends a logout request to the server */
+	private static void logoutRequest() throws UnsupportedEncodingException {
 		
 		if (!serverOnline()) {
 			disableOnlineService();
@@ -1024,29 +1031,35 @@ public class TuringClientUI {
 			mntmLogout.setEnabled(false);
 			JOptionPane.showMessageDialog(mainFrame, "Server unreachable!");
 		} else {
+		
 			ByteBuffer buffer = ByteBuffer.allocate(Config.BUF_SIZE);
 			buffer.put(Config.LOGOUT_R);
 			buffer.put((byte) userName.length());
 			buffer.put(userName.getBytes(Config.DEFAULT_ENCODING));
 			buffer.flip();
-			client_ch.write(buffer);
-		
-			byte r;
-			if ( (r=getResponse(client_ch)) != Config.SUCCESS) {
-				JOptionPane.showMessageDialog(mainFrame, Config.ERROR_LOG(r));
-			}
-			else {
-				disableOnlineService();
-				mntmRegister.setEnabled(true);
-				mntmLogin.setEnabled(true);
-				mntmLogout.setEnabled(false);
-				JOptionPane.showMessageDialog(mainFrame, "Logout succeeded");
+				
+			try {
+				client_ch.write(buffer);
+				
+				byte r;
+				if ( (r=getResponse(client_ch)) != Config.SUCCESS) {
+					JOptionPane.showMessageDialog(mainFrame, Config.ERROR_LOG(r));
+				}
+				else {
+					disableOnlineService();
+					mntmRegister.setEnabled(true);
+					mntmLogin.setEnabled(true);
+					mntmLogout.setEnabled(false);
+					JOptionPane.showMessageDialog(mainFrame, "Logout succeeded");
+				}
+			} catch (IOException io_ex) {
+				io_ex.printStackTrace();
 			}
 		}
 		return;
 	}
 	
-	/* Sends a new document creation request to the server */
+	/* sends a request to the server to create a new document */
 	private static void newDocRequest(String filename, int sections) throws UnsupportedEncodingException {
 		
 		if (!serverOnline()) {
@@ -1072,7 +1085,7 @@ public class TuringClientUI {
 		}
 	}
 	
-	/* Sends a request to the server to receive the list of proprietary and shared files */
+	/* sends a request to the server to receive the list of proprietary and shared files */
 	private static ArrayList<String> listDocsRequest() throws UnsupportedEncodingException {
 		if (!serverOnline()) {
 			JOptionPane.showMessageDialog(mainFrame, "Server currently offline, try again later");
@@ -1119,7 +1132,7 @@ public class TuringClientUI {
 		return null;
 	}
 	
-	/* Sends a request to share a given file with a destinatary user */
+	/* Sends a request to share file 'filename' with user 'destinatary' */
 	private static void shareRequest(String filename, String destinatary) throws UnsupportedEncodingException {
 		
 		if (!serverOnline()) {
@@ -1397,7 +1410,6 @@ public class TuringClientUI {
 			chatSocket = new DatagramSocket();
 			mc_receiver = new MulticastReceiver(chatAddress, chat_history);
 			mc_receiver.start();
-			System.out.println("Chat enabled...");
 
 		} catch (SocketException e) {
 			e.printStackTrace();
@@ -1416,7 +1428,15 @@ public class TuringClientUI {
 	private static void disableChat() {
 		
 		/* delete chat socket and msg_sender thread */
-		if (mc_receiver != null) mc_receiver.disableChat();
+		if (mc_receiver != null) {
+			mc_receiver.disableChat();
+			try {
+				mc_receiver.interrupt();
+				mc_receiver.join();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
 		
 		chat_history.setText("");
 		message_box.setText("");
@@ -1438,7 +1458,7 @@ public class TuringClientUI {
 		return true;
 	}
 	
-	/* Manages _Popup visibility relative to user mouse/window actions */
+	/* Manages _Popup visibility relative to user mouse actions */
 	public static void armPopup(JPopupMenu _Popup) {
 	    if(_Popup != null) {
 	        Toolkit.getDefaultToolkit().addAWTEventListener(new AWTEventListener() {

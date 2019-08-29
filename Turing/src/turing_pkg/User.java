@@ -12,7 +12,7 @@ public class User {
 	private ArrayList<Document> documents;
 	private SocketChannel notification_ch;
 	private String currentSession = null;
-	private int sessionIndex;
+	private int sessionIndex = -1;
 	
 	public User (String username, char[] password) {
 		this.username = new String(username);

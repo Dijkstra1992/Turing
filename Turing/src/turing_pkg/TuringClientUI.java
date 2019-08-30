@@ -348,6 +348,9 @@ public class TuringClientUI {
 					io_ex.printStackTrace();
 				}
 			}
+		} else {
+			try { logoutRequest(); } 
+			catch (IOException io_ex) {	io_ex.printStackTrace(); }
 		}
 	}
 	
@@ -1438,12 +1441,13 @@ public class TuringClientUI {
 	/* Disables chat service */
 	private static void disableChat() {
 		
-		/* delete chat socket and msg_sender thread */
 		if (mc_receiver != null) {
-			mc_receiver.disableChat();
-			try {
-				mc_receiver.interrupt();
+			try { 
+				System.out.println("Closing chat handler");
+				mc_receiver.disableChat();
 				mc_receiver.join();
+				System.out.println("Chat handler joined");
+
 			} catch (InterruptedException int_ex) {
 				int_ex.printStackTrace();
 			}

@@ -7,7 +7,7 @@ public class TuringRemoteRegisterOP implements TuringRemoteService{
 	public TuringRemoteRegisterOP () {
 	}
 
-	@Override
+	/* Creates a new user account and saves the credentials into the server's main database */
 	public boolean registerOP(String username, char[] password) throws RemoteException {
 		TuringServer.dbLock.lock();
 		if ( TuringServer.usersDB.containsKey(username) ) {

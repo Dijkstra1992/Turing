@@ -40,7 +40,6 @@ public class Document {
 	}
 	
 	public void setStatus(byte status, int section) {
-		System.out.println("[DOCUMENT]: setting section " + section + " of file " + this.title + " to " + status);
 		this.section_status[section] = status;
 	}
 }

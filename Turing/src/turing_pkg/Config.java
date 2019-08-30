@@ -13,10 +13,11 @@ final class Config {
 	public static final int SERVER_PORT 		 	= 3026;
 	public static final int REMOTE_SERVICE_PORT	 	= 3027;
 	public static final int CHAT_SERVICE_PORT	 	= 3028;
-	public static final int NOTIFY_SERVICE_PORT 	= 3029; 		// Server message handler address
-	public static final String SERVER_IP 	     	= "127.0.0.1";  // Local address, for client-server comunication (TCP)
+	public static final int NOTIFY_SERVICE_PORT 	= 3029;
+	public static final String SERVER_IP 	     	= "127.0.0.1";  
 	public static final String DEFAULT_ENCODING	 	= "UTF-8";
 	public static final String FILE_PATH 		 	= "C:\\Users\\Pietro\\Desktop\\TuringProjectWS\\TuringDB\\"; 
+//	public static final String FILE_PATH			= ""; // insert local DB path here
 	
 	/* request types codification */
 	public static final byte LOGIN_R		= (byte) 0x064;			// login request

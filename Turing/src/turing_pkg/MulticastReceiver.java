@@ -29,11 +29,10 @@ public class MulticastReceiver extends Thread {
 		try {
 			socket = new MulticastSocket(Config.CHAT_SERVICE_PORT);
 			socket.joinGroup(group);
-			System.out.println("MULTICAST RECEIVER READY");
 			
 			while (ACTIVE) {
 				DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-				try { socket.receive(packet); } catch (SocketException sock_ex) { System.out.println("Chat socket closed"); }
+				try { socket.receive(packet); } catch (SocketException sock_ex) { }
 				String message = new String(packet.getData(), 0, packet.getLength());
 				if (message.isEmpty()) break;
 				chat_box.append(message + "\n");
@@ -47,7 +46,7 @@ public class MulticastReceiver extends Thread {
 			ACTIVE = false;
 			socket.leaveGroup(group);
 			socket.close();
-			System.out.println("MULTICAST RECEIVER INTERRUPTED!!!");
+			return;
 		} catch (SocketException sock_ex) {
 			System.out.println("Chat socket closed");
 		} catch (IOException io_ex) {

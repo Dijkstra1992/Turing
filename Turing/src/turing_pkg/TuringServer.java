@@ -37,9 +37,8 @@ import turing_pkg.Config;
 
 public class TuringServer {
 	
-	/* Users database structure */ 
 	public static Map<String, User> usersDB; 	 						// registered users (<username, User>)
-	public static Lock dbLock;
+	public static Lock dbLock;											// usersDB lock for mutual exclusion access
 	private static Map<String, SocketChannel> loggedUsers;				// online users (<username, client_socket_channel>)
 	private static Map<String, String> editingSessions;					// list of currently open sections for editing (<file_section_name, username>)
 	private static Map<String, ChatGroup> chatGroups;					// for chat groups managing (<filename, chatgroup object>)
@@ -67,6 +66,8 @@ public class TuringServer {
 		editingSessions = new HashMap<String, String>();
 		chatGroups = new HashMap<String, ChatGroup>();
 		pendingNotifications = new HashMap<String, ArrayList<String>>();
+		Set<SelectionKey> key_set;
+		Iterator<SelectionKey> key_iterator;
 
 		/* Clean up any existing files from previous executions */
 		System.out.println("Cleaning previous execution files...");
@@ -81,9 +82,6 @@ public class TuringServer {
 		registry.rebind("registerOP", stub);
 		
 		System.out.println("Server started on port " + Config.SERVER_PORT);
-		
-		Set<SelectionKey> key_set;
-		Iterator<SelectionKey> key_iterator;
 		
 		ByteBuffer buffer = ByteBuffer.allocate(Config.BUF_SIZE);
 		while (true) { // server routine

@@ -337,10 +337,21 @@ public class TuringClientUI {
 	}
 	
 	private static void logoutActionPerformed() {
-		try {
-			logoutRequest();
-		} catch (IOException e) {
-			e.printStackTrace();
+		if (CLIENT_STATUS == Config.EDITING) {
+			int selection = JOptionPane.showConfirmDialog(null, 
+					"Open editing session detected. Do you really want to exit ?",
+					"Confirm logout", 
+					JOptionPane.YES_NO_OPTION,
+					JOptionPane.QUESTION_MESSAGE);
+			if (selection == JOptionPane.YES_OPTION) {
+				try {
+					endEditRequest(session_name, session_index);
+					editorWindow.dispose();
+					logoutRequest();
+				} catch (IOException io_ex) {
+					io_ex.printStackTrace();
+				}
+			}
 		}
 	}
 	
@@ -1398,7 +1409,12 @@ public class TuringClientUI {
 		btnSend.setEnabled(false);
 		statusBar.setText("Offline");
 		statusBar.setBackground(Color.GRAY);
-		notification_handler.interrupt();
+		try {
+			notification_handler.interrupt();
+			notification_handler.join();
+		} catch (InterruptedException int_ex) {
+			int_ex.printStackTrace();
+		}
 		disableChat();
 	}
 	
@@ -1433,8 +1449,8 @@ public class TuringClientUI {
 			try {
 				mc_receiver.interrupt();
 				mc_receiver.join();
-			} catch (InterruptedException e) {
-				e.printStackTrace();
+			} catch (InterruptedException int_ex) {
+				int_ex.printStackTrace();
 			}
 		}
 		

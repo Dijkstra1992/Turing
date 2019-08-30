@@ -1,6 +1,5 @@
 package turing_pkg;
 
-import java.awt.AWTEvent;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -11,9 +10,6 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.HeadlessException;
 import java.awt.MouseInfo;
-import java.awt.Rectangle;
-import java.awt.Toolkit;
-import java.awt.event.AWTEventListener;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
@@ -451,7 +447,7 @@ public class TuringClientUI {
 				JOptionPane.showMessageDialog(
 						mainFrame, 
 						"Invalid credentials", 
-						"Invalid username/password: password must be at least 5 characters long", 
+						"Username & Password must be at least 5 characters long", 
 						JOptionPane.ERROR_MESSAGE);
 			}
 			
@@ -551,7 +547,7 @@ public class TuringClientUI {
 			if (!(isValidUser(username, password))) {
 				JOptionPane.showMessageDialog(
 						mainFrame, 
-						"Please choose a valid Username and Password", 
+						"Username & Password must be at least 5 characters long", 
 						"Invalid username/password", 
 						JOptionPane.ERROR_MESSAGE);
 			}
@@ -584,7 +580,7 @@ public class TuringClientUI {
 					JOptionPane.showMessageDialog(
 							mainFrame, 
 							"Unable to reach the server, try again later", 
-							"CONNECTION_ERROR", 
+							"COM_ERROR", 
 							JOptionPane.ERROR_MESSAGE);
 				} 
 			}
@@ -775,7 +771,7 @@ public class TuringClientUI {
 				String selected_file = new String(file_explorer.getSelectedValue());
 				JPopupMenu popup = editSectionPopupMenu(selected_file, documents.get(selected_file));
 				popup.setLocation(MouseInfo.getPointerInfo().getLocation());
-				armPopup(popup);
+				//armPopup(popup);
 				popup.setVisible(true);
 				
 			}
@@ -786,7 +782,7 @@ public class TuringClientUI {
 				String selected_file = new String(file_explorer.getSelectedValue());
 				JPopupMenu popup = showSectionPopupMenu(selected_file, documents.get(selected_file));
 				popup.setLocation(MouseInfo.getPointerInfo().getLocation());
-				armPopup(popup);
+				//armPopup(popup);
 				popup.setVisible(true);
 			}
 		});
@@ -904,7 +900,7 @@ public class TuringClientUI {
 		// Edit button listener
 		btnEdit.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
-				
+				popupMenu.setVisible(false);
 				if (CLIENT_STATUS == Config.EDITING) {
 					JOptionPane.showMessageDialog(
 							mainFrame,
@@ -927,7 +923,6 @@ public class TuringClientUI {
 						session_name = new String(filename);
 						session_index = s;
 					} 
-					popupMenu.setVisible(false);	
 				} catch (UnsupportedEncodingException enc_e) {
 					JOptionPane.showMessageDialog(mainFrame, enc_e.getMessage(), "ERROR", JOptionPane.ERROR_MESSAGE);
 				} catch (UnknownHostException host_e) {
@@ -967,6 +962,7 @@ public class TuringClientUI {
 		
 		btnShow.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
+				popupMenu.setVisible(false);
 				byte s = (byte) s_lister.getSelectedIndex(); 
 				String text;
 				try {
@@ -983,7 +979,6 @@ public class TuringClientUI {
 						viewer.setLocationRelativeTo(file_explorer);
 						viewer.setSize(480, 480);
 						viewer.setVisible(true);
-						
 					}
 				} catch (UnsupportedEncodingException e) {
 					JOptionPane.showMessageDialog(mainFrame, e.getMessage(), "ERROR", JOptionPane.ERROR_MESSAGE);
@@ -1463,42 +1458,4 @@ public class TuringClientUI {
 		message_box.setBackground(Color.LIGHT_GRAY);
 	}
 
-	/* Returns true if mouse points outside of the given region */
-	private static boolean pointsOutOfRegion(Rectangle region) {
-		int mouseX = MouseInfo.getPointerInfo().getLocation().x;
-		int mouseY = MouseInfo.getPointerInfo().getLocation().y;
-		if ( (mouseX >= region.getMinX() && mouseX <= region.getMaxX()) && 
-			(mouseY >= region.getMinY() && mouseY <= region.getMaxY()) )
-			return false;
-		
-		return true;
-	}
-	
-	/* Manages _Popup visibility relative to user mouse actions */
-	public static void armPopup(JPopupMenu _Popup) {
-	    if(_Popup != null) {
-	        Toolkit.getDefaultToolkit().addAWTEventListener(new AWTEventListener() {
-	            @Override
-	            public void eventDispatched(AWTEvent event) {
-
-	                if(event instanceof MouseEvent) {
-	                    MouseEvent m = (MouseEvent)event;
-	                    if(m.getID() == MouseEvent.MOUSE_CLICKED && pointsOutOfRegion(_Popup.getVisibleRect())){
-	                        _Popup.setVisible(false);
-	                        Toolkit.getDefaultToolkit().removeAWTEventListener(this);
-	                    }
-	                }
-	                if(event instanceof WindowEvent) {
-	                    WindowEvent we = (WindowEvent)event;
-	                    if(we.getID() == WindowEvent.WINDOW_DEACTIVATED || we.getID() == WindowEvent.WINDOW_STATE_CHANGED) {
-	                        _Popup.setVisible(false);
-	                        Toolkit.getDefaultToolkit().removeAWTEventListener(this);
-	                    }
-	                }
-	            }
-
-	        }, AWTEvent.MOUSE_EVENT_MASK | AWTEvent.WINDOW_EVENT_MASK);
-
-	    }
-	}
 }

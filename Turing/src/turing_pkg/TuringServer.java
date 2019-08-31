@@ -174,8 +174,9 @@ public class TuringServer {
 				byte[] password = new byte[pass_s*2];
 				buffer.get(password, 0, (pass_s*2));
 				char[] pass = Config.toChars(password);
-				System.out.println("User " + user + " logged in");
-				loginUser(client, user, pass);
+				if (loginUser(client, user, pass)) {
+					System.out.println("User " + user + " logged in");
+				}
 				break;
 				
 			/* logout request */
@@ -200,8 +201,8 @@ public class TuringServer {
 				file_name = new byte[file_name_s];
 				buffer.get(file_name, 0, file_name_s);
 				file = new String(file_name, Config.DEFAULT_ENCODING);
-				System.out.println("User " + user + " created new document: " + file);
 				newDocCreate(client, user, file , sections);
+				System.out.println("User " + user + " created new document: " + file);
 				break;
 				
 			/* list user documents request */
@@ -228,8 +229,9 @@ public class TuringServer {
 				user = new String(username, Config.DEFAULT_ENCODING);
 				file = new String(file_name, Config.DEFAULT_ENCODING);
 				dest = new String(dest_name, Config.DEFAULT_ENCODING);
-				System.out.println("User " + user + " shared file " + file + " with user " + dest);
-				shareDoc(client, user, dest, file);
+				if (shareDoc(client, user, dest, file)) {
+					System.out.println("User " + user + " shared file " + file + " with user " + dest);
+				}
 				break; 
 				
 			/* "show" and "show section" requests */
@@ -267,7 +269,6 @@ public class TuringServer {
 				currentUser = usersDB.get(user);
 				dbLock.unlock();
 				currentDoc = currentUser.getDocument(file);
-				System.out.println("User " + user + " requested file " + file + " (EDIT MODE)");
 				if (currentDoc.getStatus(section) == Config.IN_EDIT) { // file section currently in edit by other user
 					byte[] editor = (editingSessions.get(file + "_" + section)).getBytes(Config.DEFAULT_ENCODING);
 					ByteBuffer response = ByteBuffer.allocate(Config.BUF_SIZE);
@@ -287,6 +288,7 @@ public class TuringServer {
 					currentDoc.setStatus(Config.IN_EDIT, section);
 					editingSessions.put(new String(file + "_" + section), user);
 					currentUser.setSessionStatus(file, section);
+					System.out.println("User " + user + " requested file section " + section + " of file" + file + " (EDIT MODE)");
 				}
 				break;
 				
@@ -359,14 +361,14 @@ public class TuringServer {
 	}
 	
 	/* User login */
-	private static void loginUser(SocketChannel client, String username, char[] password) {
+	private static boolean loginUser(SocketChannel client, String username, char[] password) {
 		
 		// checking if user is registered
 		dbLock.lock();
 		if ( !usersDB.containsKey(username) ) {
 			dbLock.unlock();
 			sendResponse(client, Config.UNKNOWN_USER);
-			return;
+			return false;
 		}
 		
 		// checking password validity
@@ -377,30 +379,25 @@ public class TuringServer {
 		for (int i=0; i<password.length; i++) {
 			if (pass[i] != password[i]) {
 				sendResponse(client, Config.INVALID_PASS);
-				return;
+				return false;
 			}
 		}
 		
 		// check if user is already online
 		if ( loggedUsers.containsKey(username)) {
 			sendResponse(client, Config.ALREADY_ON);
-			return;
+			return false;
 		}
 		
 		// user login
 		loggedUsers.put(username, client);
 		sendResponse(client, Config.SUCCESS); 
+		return true;
 		
 	}
 	
-	/* Creates a new file */
+	/* Creates a new document */
 	private static void newDocCreate(SocketChannel client, String username, String filename, int sections) {
-		
-		// check if user is already online
-		if ( !loggedUsers.containsKey(username)) {
-			sendResponse(client, Config.UNKNOWN_USER);
-			return;
-		}
 		
 		String pathName = new String(Config.FILE_PATH + username + "\\" + filename);
 		Path savePath = Paths.get(pathName);
@@ -463,11 +460,11 @@ public class TuringServer {
 	}
 	
 	/* Adds document 'file' to receivers documents list */
-	private static void shareDoc(SocketChannel client, String sender, String receiver, String file) {
+	private static boolean shareDoc(SocketChannel client, String sender, String receiver, String file) {
 		
 		if (sender.equals(receiver)) { 
 			sendResponse(client, Config.INVALID_DEST);
-			return;
+			return false;
 		}
 		
 		dbLock.lock();
@@ -475,12 +472,12 @@ public class TuringServer {
 		dbLock.unlock();
 		if ( recvr == null) { 
 			sendResponse(client, Config.UNKNOWN_USER);
-			return;
+			return false;
 		}
 		
 		if ( recvr.getDocument(file) != null) {
 			sendResponse(client, Config.INVALID_DEST);
-			return;
+			return false;
 		}
 		
 		dbLock.lock();
@@ -489,7 +486,7 @@ public class TuringServer {
 		Document source = sendr.getDocument(file);
 		if (source == null) {
 			sendResponse(client, Config.NO_SUCH_FILE);
-			return;
+			return false;
 		}
 		recvr.addFile(source);
 		sendResponse(client, Config.SUCCESS);
@@ -511,7 +508,7 @@ public class TuringServer {
 			sendNotification(notify_ch, message);
 		}
 		
-		return;
+		return true;
 	}
 
 	/* Sends file 'filename' to user 'username' */

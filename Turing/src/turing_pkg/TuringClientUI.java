@@ -1,15 +1,19 @@
 package turing_pkg;
 
+import java.awt.AWTEvent;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Rectangle;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.HeadlessException;
 import java.awt.MouseInfo;
+import java.awt.Toolkit;
+import java.awt.event.AWTEventListener;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
@@ -66,7 +70,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.border.EmptyBorder;
 
-public class TuringClientUI {
+public class TuringClientUI { 
 
 	private static SocketChannel client_ch = null;
 	private static SocketChannel notification_ch = null;
@@ -80,7 +84,7 @@ public class TuringClientUI {
 	private static Thread notification_handler = null;
 	private static byte CLIENT_STATUS;
 	private static String session_name;
-	private static int session_index;
+	private static int session_index; 
 	
 	/* UI components */
 	private static JFrame mainFrame;
@@ -277,7 +281,9 @@ public class TuringClientUI {
 		mntmList = new JMenuItem("List");
 		mntmList.addActionListener(new ActionListener() { // LIST button listener
 			public void actionPerformed(ActionEvent evt) {
-				listActionPerformed();
+				if (listActionPerformed()) {
+					mntmList.setEnabled(false);
+				}
 			}
 		});
 		mntmList.setEnabled(false);
@@ -360,7 +366,7 @@ public class TuringClientUI {
 		docDialog.setVisible(true);
 	}
 
-	private static void listActionPerformed() {
+	private static boolean listActionPerformed() {
 		ArrayList<String> rcv_files = null;
 		try {
 			rcv_files = listDocsRequest();
@@ -380,6 +386,9 @@ public class TuringClientUI {
 			}
 			listDialog.setLocationRelativeTo(mainFrame);
 			listDialog.setVisible(true);
+			return true;
+		} else {
+			return false;
 		}
 	}
 	
@@ -449,8 +458,8 @@ public class TuringClientUI {
 			if (!isValidUser(username, password)) {
 				JOptionPane.showMessageDialog(
 						mainFrame, 
-						"Invalid credentials", 
 						"Username & Password must be at least 5 characters long", 
+						"Invalid credentials", 
 						JOptionPane.ERROR_MESSAGE);
 			}
 			
@@ -624,7 +633,14 @@ public class TuringClientUI {
 		btnCreate.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 			String filename = new String(namefield.getText());
-			int section_num = Integer.parseInt(sectionfield.getText());
+			int section_num = 0;
+			try {
+				section_num = Integer.parseInt(sectionfield.getText());
+			} catch (NumberFormatException num_ex) {
+				JOptionPane.showMessageDialog(dialog, "Only numeric values admitted");
+				sectionfield.setText("");
+				return;
+			}
 			
 			if (filename.contains("-")) {
 				JOptionPane.showMessageDialog(mainFrame, "Illegal character ' - '");
@@ -727,6 +743,7 @@ public class TuringClientUI {
 			@Override
 			public void windowClosing(WindowEvent e) {
 				dialog.dispose();
+				mntmList.setEnabled(true);
 			}
 		});
 		
@@ -774,7 +791,6 @@ public class TuringClientUI {
 				String selected_file = new String(file_explorer.getSelectedValue());
 				JPopupMenu popup = editSectionPopupMenu(selected_file, documents.get(selected_file));
 				popup.setLocation(MouseInfo.getPointerInfo().getLocation());
-				//armPopup(popup);
 				popup.setVisible(true);
 				
 			}
@@ -899,7 +915,7 @@ public class TuringClientUI {
 		for (int i=0; i<sections; i++) {
 			s_lister.addItem(i);
 		}
-		
+				
 		// Edit button listener
 		btnEdit.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
@@ -940,6 +956,7 @@ public class TuringClientUI {
 				popupMenu.setVisible(false);
 			}
 		});
+		setPopupVisibility(popupMenu);
 		
 		panel.setLayout(new FlowLayout());
 		panel.add(s_lister);
@@ -994,6 +1011,8 @@ public class TuringClientUI {
 				popupMenu.setVisible(false);
 			}
 		});
+		
+		setPopupVisibility(popupMenu);
 		
 		panel.setLayout(new FlowLayout());
 		panel.add(s_lister);
@@ -1462,4 +1481,44 @@ public class TuringClientUI {
 		message_box.setBackground(Color.LIGHT_GRAY);
 	}
 
+	/* Returns true if mouse points outside of the given region */
+	private static boolean pointsOutOfRegion(Rectangle region) {
+		int mouseX = MouseInfo.getPointerInfo().getLocation().x;
+		int mouseY = MouseInfo.getPointerInfo().getLocation().y;
+		if ( (mouseX >= region.getMinX() && mouseX <= region.getMaxX()) && 
+			(mouseY >= region.getMinY() && mouseY <= region.getMaxY()) )
+			return false;
+
+		return true;
+	}
+
+	/* Manages _Popup visibility relative to user actions */
+	public static void setPopupVisibility(JPopupMenu popup) {
+	    if(popup != null) {
+	        Toolkit.getDefaultToolkit().addAWTEventListener(new AWTEventListener() {
+	            @Override
+	            public void eventDispatched(AWTEvent event) {
+
+	                if(event instanceof MouseEvent) {
+	                    MouseEvent me = (MouseEvent)event;
+	                    Rectangle rect = new Rectangle(popup.getLocationOnScreen(), popup.getSize());
+	                    if(me.getID() == MouseEvent.MOUSE_CLICKED && pointsOutOfRegion(rect)){ // user clicked mouse outside of popup window
+	                    	popup.setVisible(false);
+	                        Toolkit.getDefaultToolkit().removeAWTEventListener(this);
+	                    }
+	                }
+	                if(event instanceof WindowEvent) {
+	                    WindowEvent we = (WindowEvent)event;
+	                    if(we.getID() == WindowEvent.WINDOW_DEACTIVATED || we.getID() == WindowEvent.WINDOW_STATE_CHANGED) { // popup parent component disposed
+	                    	popup.setVisible(false);
+	                        Toolkit.getDefaultToolkit().removeAWTEventListener(this);
+	                    }
+	                }
+	            }
+
+	        }, AWTEvent.MOUSE_EVENT_MASK | AWTEvent.WINDOW_EVENT_MASK);
+
+	    }
+	}
+	
 }

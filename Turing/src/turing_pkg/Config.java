@@ -19,48 +19,48 @@ final class Config {
 	public static final String FILE_PATH 		 	= "C:\\Users\\Pietro\\Desktop\\TuringProjectWS\\TuringDB\\"; 
 //	public static final String FILE_PATH			= ""; // insert local DB path here
 	
-	/* request types codification */
-	public static final byte LOGIN_R		= (byte) 0x064;			// login request
-	public static final byte LOGOUT_R 		= (byte) 0x065;			// logout request
-	public static final byte NEW_R	 		= (byte) 0x066;			// create new document request
-	public static final byte EDIT_R			= (byte) 0x067; 		// edit an existing document request
-	public static final byte END_EDIT_R		= (byte) 0x068; 		// close editing section request
-	public static final byte SHARE_R 		= (byte) 0x069;			// share document request
-	public static final byte LIST_R			= (byte) 0x070; 		// lists all proprietary/shared files
-	public static final byte SHOW_R		 	= (byte) 0x071; 		// download section request
-	public static final byte SAVE_R			= (byte) 0x072; 		// save edited section request
-	public static final byte NOTIFY_SERV_R  = (byte) 0x073;			// notification service start request
+	/* request type codes */
+	public static final byte LOGIN_R		= (byte) 0x000;			// login request
+	public static final byte LOGOUT_R 		= (byte) 0x001;			// logout request
+	public static final byte NEW_R	 		= (byte) 0x002;			// create new document request
+	public static final byte EDIT_R			= (byte) 0x003; 		// edit an existing document request
+	public static final byte END_EDIT_R		= (byte) 0x004; 		// close editing section request
+	public static final byte SHARE_R 		= (byte) 0x005;			// share document request
+	public static final byte LIST_R			= (byte) 0x006; 		// lists all proprietary/shared files
+	public static final byte SHOW_R		 	= (byte) 0x007; 		// download section request
+	public static final byte SAVE_R			= (byte) 0x008; 		// save edited section request
+	public static final byte NOTIFY_SERV_R  = (byte) 0x009;			// notification service start request
 	
 		
-	/* errors and messages codification */
-	public static final byte SUCCESS 	 	= (byte) 0x164;
-	public static final byte INVALID_PASS	= (byte) 0x165;
-	public static final byte ALREADY_ON 	= (byte) 0x166;
-	public static final byte UNKNOWN_USER	= (byte) 0x167;
-	public static final byte UNKNOWN_ERROR 	= (byte) 0x168;
-	public static final byte NO_SUCH_FILE	= (byte) 0x169;
-	public static final byte INVALID_DEST   = (byte) 0x170;
-	public static final byte EMPTY_LIST		= (byte) 0x171;
-	public static final byte INVALID_SECT	= (byte) 0x172;
-	public static final byte RECEIVING_BYTES= (byte) 0x173;
-	public static final byte NO_BYTES 		= (byte) 0x174;
+	/* response & error codes */
+	public static final byte SUCCESS 	 	= (byte) 0x100;
+	public static final byte INVALID_PASS	= (byte) 0x101;
+	public static final byte ALREADY_ON 	= (byte) 0x102;
+	public static final byte UNKNOWN_USER	= (byte) 0x103;
+	public static final byte UNKNOWN_ERROR 	= (byte) 0x104;
+	public static final byte NO_SUCH_FILE	= (byte) 0x105;
+	public static final byte INVALID_DEST   = (byte) 0x106;
+	public static final byte EMPTY_LIST		= (byte) 0x107;
+	public static final byte INVALID_SECT	= (byte) 0x108;
+	public static final byte RECEIVING_BYTES= (byte) 0x109;
+	public static final byte NO_BYTES 		= (byte) 0x110;
 	
-	/* file permissions codification  */
-	public static final byte CREATOR		= (byte) 0x264;
-	public static final byte SHARED			= (byte) 0x265;
+	/* file permissions */
+	public static final byte CREATOR		= (byte) 0x200;
+	public static final byte SHARED			= (byte) 0x201;
 	
 	/* file section status */
-	public static final byte FREE_SECTION	= (byte) 0x364;
-	public static final byte IN_EDIT		= (byte) 0x365;
+	public static final byte FREE_SECTION	= (byte) 0x250;
+	public static final byte IN_EDIT		= (byte) 0x251;
 	
 	/* CLIENT status codes */
-	public static final byte OFFLINE		= (byte) 0x464;
-	public static final byte ONLINE			= (byte) 0x465;
-	public static final byte EDITING		= (byte) 0x466;
+	public static final byte OFFLINE		= (byte) 0;
+	public static final byte ONLINE			= (byte) 1;
+	public static final byte EDITING		= (byte) 2;
 	
 	private Config () {}
 	 
- 	/* Converts a given ERROR CODE into a printable message that describes the error */ 
+ 	/* Converts a given ERROR_CODE into a printable message that describes the error */ 
 	public static final String ERROR_LOG(byte ERROR_CODE) {  
 		String log = new String(); 
 		

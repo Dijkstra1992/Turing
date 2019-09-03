@@ -30,8 +30,11 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.nio.BufferOverflowException;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.rmi.NotBoundException;
@@ -73,7 +76,7 @@ import javax.swing.border.EmptyBorder;
 
 public class TuringClientUI { 
 	
-	/* client status codes */
+	/* client status */
 	private static final byte OFFLINE		= (byte) 0;
 	private static final byte ONLINE		= (byte) 1;
 	private static final byte EDITING		= (byte) 2;
@@ -90,8 +93,8 @@ public class TuringClientUI {
 	private static MulticastReceiver mc_receiver;
 	private static Thread notification_handler = null;
 	private static byte CLIENT_STATUS;
-	private static String session_name;
-	private static int session_index; 
+	private static String edit_session_name;
+	private static int edit_session_index; 
 	
 	/* UI components */
 	private static JFrame mainFrame;
@@ -137,7 +140,7 @@ public class TuringClientUI {
 	}
 
 	/**********************************************
-	 * Initialize Graphic User Interface components
+	 * Initialize Graphic User Interface
 	 **********************************************/
 	private static void initGUI() {		
 		mainFrame = new JFrame("TURING");
@@ -157,7 +160,7 @@ public class TuringClientUI {
 							JOptionPane.QUESTION_MESSAGE);
 					if ( selection == JOptionPane.YES_OPTION ) {
 						try {
-							endEditRequest(session_name, session_index);
+							endEditRequest(edit_session_name, edit_session_index);
 							logoutRequest(); 
 						} catch (IOException io_ex) { io_ex.printStackTrace(); }
 						editorWindow.dispose();
@@ -351,7 +354,7 @@ public class TuringClientUI {
 					JOptionPane.QUESTION_MESSAGE);
 			if (selection == JOptionPane.YES_OPTION) {
 				try {
-					endEditRequest(session_name, session_index);
+					endEditRequest(edit_session_name, edit_session_index);
 					editorWindow.dispose();
 					logoutRequest();
 				} catch (IOException io_ex) {
@@ -814,20 +817,9 @@ public class TuringClientUI {
 		mntmShow.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
 				String selected_file = new String(file_explorer.getSelectedValue());
-				if ( (session_name.compareTo(selected_file) == 0) && (CLIENT_STATUS != EDITING) ) {
-					JOptionPane.showMessageDialog(dialog, "File already open");
-					return;
-				}
 				try {
 					String text = downloadRequest(selected_file, -1, Config.SHOW_R);
-					JDialog viewer = new JDialog();
-					JTextArea textArea = new JTextArea();
-					textArea.setEditable(false);
-					viewer.setTitle(selected_file);
-					viewer.getContentPane().add(textArea);
-					textArea.setText(text);
-					viewer.setLocationRelativeTo(file_explorer);
-					viewer.setSize(480, 480);
+					JFrame viewer = fileViewer(selected_file, text);
 					viewer.setVisible(true);
 				}
 				catch (IOException ex) {ex.printStackTrace();}
@@ -845,6 +837,25 @@ public class TuringClientUI {
 		dialog.getContentPane().add(panel);
 		
 		return dialog;
+	}
+	
+	private static JFrame fileViewer(String filename, String text) {
+		JFrame frame = new JFrame(filename);
+		JTextArea textArea = new JTextArea();
+		JScrollPane textScroll = new JScrollPane(textArea);
+		frame.setSize(new Dimension(800, 600));
+		frame.setResizable(true);
+		
+		textArea.setEditable(false);
+		textArea.setLineWrap(true);
+		textArea.setText(text);
+		
+		textScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+		textScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+		
+		frame.getContentPane().add(textScroll);
+		
+		return frame;
 	}
 	
 	private static JFrame fileEditor(String filename, String text, int section) {
@@ -947,8 +958,8 @@ public class TuringClientUI {
 						String chat_address = getGroupAddress();
 						chatAddress = InetAddress.getByName(chat_address);
 						enableChat();
-						session_name = new String(filename);
-						session_index = s;
+						edit_session_name = new String(filename);
+						edit_session_index = s;
 					} 
 				} catch (UnsupportedEncodingException enc_e) {
 					JOptionPane.showMessageDialog(mainFrame, enc_e.getMessage(), "ERROR", JOptionPane.ERROR_MESSAGE);
@@ -990,11 +1001,6 @@ public class TuringClientUI {
 		btnShow.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
 				byte s = (byte) s_lister.getSelectedIndex(); 
-				if ((session_name.compareTo(filename) == 0) && session_index == s) {
-					JOptionPane.showMessageDialog(file_explorer, "File already open");
-					popupMenu.setVisible(false);
-					return;
-				}
 				popupMenu.setVisible(false);
 				String text;
 				try {
@@ -1002,14 +1008,7 @@ public class TuringClientUI {
 					if (text == null) {
 						JOptionPane.showMessageDialog(file_explorer, "Error retrieving selected file");
 					} else {
-						JDialog viewer = new JDialog();
-						JTextArea textArea = new JTextArea();
-						textArea.setEditable(false);
-						viewer.setTitle(filename + ", section " + s);
-						viewer.getContentPane().add(textArea);
-						textArea.setText(text);
-						viewer.setLocationRelativeTo(file_explorer);
-						viewer.setSize(480, 480);
+						JFrame viewer = fileViewer(filename, text);
 						viewer.setVisible(true);
 					}
 				} catch (UnsupportedEncodingException e) {
@@ -1084,11 +1083,12 @@ public class TuringClientUI {
 				JOptionPane.showMessageDialog(mainFrame, "Logout succeeded");
 			}
 		} catch (IOException req_ex) {
-			JOptionPane.showMessageDialog(mainFrame, "Server unreachable!");
-			mntmRegister.setEnabled(true);
-			mntmLogin.setEnabled(true);
-			mntmLogout.setEnabled(false);
-			disableOnlineService();
+			if (!serverOnline()) {
+				JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
+				disableOnlineService();
+			} else {
+				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
+			}
 			return;
 		}
 		
@@ -1111,11 +1111,12 @@ public class TuringClientUI {
 		try {
 			client_ch.write(request);
 		} catch (IOException req_ex) {
-			JOptionPane.showMessageDialog(mainFrame, "Server unreachable!");
-			mntmRegister.setEnabled(true);
-			mntmLogin.setEnabled(true);
-			mntmLogout.setEnabled(false);
-			disableOnlineService();
+			if (!serverOnline()) {
+				JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
+				disableOnlineService();
+			} else {
+				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
+			}
 			return;
 		}
 	}
@@ -1158,11 +1159,12 @@ public class TuringClientUI {
 				return received_files;
 			}
 		} catch (IOException req_ex) {
-			JOptionPane.showMessageDialog(mainFrame, "Server unreachable!");
-			mntmRegister.setEnabled(true);
-			mntmLogin.setEnabled(true);
-			mntmLogout.setEnabled(false);
-			disableOnlineService();
+			if (!serverOnline()) {
+				JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
+				disableOnlineService();
+			} else {
+				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
+			}
 			return null;		
 		}
 	}
@@ -1188,11 +1190,12 @@ public class TuringClientUI {
 		try {
 			client_ch.write(request);
 		} catch (IOException req_ex) {
-			JOptionPane.showMessageDialog(mainFrame, "Server unreachable!");
-			mntmRegister.setEnabled(true);
-			mntmLogin.setEnabled(true);
-			mntmLogout.setEnabled(false);
-			disableOnlineService();
+			if (!serverOnline()) {
+				JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
+				disableOnlineService();
+			} else {
+				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
+			}
 			return;
 		}
 	}
@@ -1217,12 +1220,17 @@ public class TuringClientUI {
 			client_ch.write(request);
 			String file = downloadFile(); 
 			return file;
-		} catch (IOException req_ex) {
-			JOptionPane.showMessageDialog(mainFrame, "Server unreachable!");
-			mntmRegister.setEnabled(true);
-			mntmLogin.setEnabled(true);
-			mntmLogout.setEnabled(false);
-			disableOnlineService();
+		} catch (BufferUnderflowException | BufferOverflowException buff_ex) {
+			JOptionPane.showMessageDialog(mainFrame, "Error retrieving requested file");
+			return null;
+		}
+		catch (IOException req_ex) {
+			if (!serverOnline()) {
+				JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
+				disableOnlineService();
+			} else {
+				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
+			}
 			return null;
 		}
 		
@@ -1303,12 +1311,14 @@ public class TuringClientUI {
 			client_ch.write(request);
 		}
 		catch (IOException io_ex) {
-			JOptionPane.showMessageDialog(mainFrame, "Server unreachable!");
-			mntmRegister.setEnabled(true);
-			mntmLogin.setEnabled(true);
-			mntmLogout.setEnabled(false);
-			disableOnlineService();
-			return;		}
+			if (!serverOnline()) {
+				JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
+				disableOnlineService();
+			} else {
+				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
+			}
+			return;
+		}
 		
 	}
 
@@ -1331,11 +1341,12 @@ public class TuringClientUI {
 			disableChat();
 			CLIENT_STATUS = ONLINE;
 		} catch (IOException req_ex) {
-			JOptionPane.showMessageDialog(mainFrame, "Server unreachable!");
-			mntmRegister.setEnabled(true);
-			mntmLogin.setEnabled(true);
-			mntmLogout.setEnabled(false);
-			disableOnlineService();
+			if (!serverOnline()) {
+				JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
+				disableOnlineService();
+			} else {
+				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
+			}
 			return;
 		}
 	}
@@ -1360,6 +1371,25 @@ public class TuringClientUI {
 	
 	/************************************ UTILITY FUNCTIONS ***********************************************/
 	
+	@SuppressWarnings("resource")
+	private static boolean serverOnline() {
+		try {
+			
+			InetAddress address = InetAddress.getByName(Config.SERVER_IP);  // host reachable
+			Socket sock = new Socket(address, Config.SERVER_PORT); 			
+			if (sock.isConnected()) { // server active, accepting connections
+				sock.close();
+				return true;
+			}
+
+			return false;
+
+		} catch (IOException com_ex) {
+			System.out.println(com_ex.getLocalizedMessage());
+			return false; 
+		}
+	}
+	
 	/* Waits to receive a response code from the server for the current request */
 	private static byte getResponse(SocketChannel channel) {
 		ByteBuffer response = ByteBuffer.allocate(1);		
@@ -1370,8 +1400,12 @@ public class TuringClientUI {
 			byte r_code = response.get();
 			return r_code;		
 		} catch (IOException io_ex) {
-			JOptionPane.showMessageDialog(mainFrame, "Server unreachable");
-			disableOnlineService();
+			if (!serverOnline()) {
+				JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
+				disableOnlineService();
+			} else {
+				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
+			}
 			return Config.COM_ERROR;
 		}
 	}
@@ -1386,7 +1420,15 @@ public class TuringClientUI {
 			}
 			buffer.flip();
 			group_address = new String(buffer.array(), Config.DEFAULT_ENCODING);
-		} catch (IOException io_ex) {io_ex.printStackTrace(); }
+		} catch (IOException io_ex) {
+			if (!serverOnline()) {
+				JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
+				disableOnlineService();
+			} else {
+				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
+			}
+			return null;
+		}
 		
 		
 		return group_address;
@@ -1443,8 +1485,13 @@ public class TuringClientUI {
 		mntmNew.setEnabled(false);
 		mntmList.setEnabled(false);
 		btnSend.setEnabled(false);
+		mntmRegister.setEnabled(true);
+		mntmLogin.setEnabled(true);
+		mntmLogout.setEnabled(false);
 		statusBar.setText("Offline");
 		statusBar.setBackground(Color.GRAY);
+		edit_session_name = null;
+		edit_session_index =-1;
 		if (notification_handler != null && notification_handler.isAlive()) {
 			try {
 				notification_handler.interrupt();
@@ -1509,7 +1556,7 @@ public class TuringClientUI {
 		return true;
 	}
 
-	/* Manages _Popup visibility relative to user actions */
+	/* Manages 'popup' visibility relative to user actions */
 	public static void setPopupVisibility(JPopupMenu popup) {
 	    if(popup != null) {
 	        Toolkit.getDefaultToolkit().addAWTEventListener(new AWTEventListener() {
@@ -1532,7 +1579,7 @@ public class TuringClientUI {
 	                }
 	                if(event instanceof WindowEvent) {
 	                    WindowEvent we = (WindowEvent)event;
-	                    if(we.getID() == WindowEvent.WINDOW_DEACTIVATED || we.getID() == WindowEvent.WINDOW_STATE_CHANGED) { // popup parent component disposed
+	                    if(we.getID() == WindowEvent.WINDOW_DEACTIVATED || we.getID() == WindowEvent.WINDOW_STATE_CHANGED) { // parent component disposed
 	                    	popup.setVisible(false);
 	                        Toolkit.getDefaultToolkit().removeAWTEventListener(this);
 	                    }

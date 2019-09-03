@@ -31,7 +31,7 @@ public class NotificationHandler implements Runnable {
 		while(!Thread.currentThread().isInterrupted()) {
 			try {
 				while ((notification_ch.read(buffer)) <= 0) {
-					Thread.sleep(3000);
+					Thread.sleep(1500);
 				}
 				buffer.flip();
 				size = buffer.getInt();
@@ -42,13 +42,19 @@ public class NotificationHandler implements Runnable {
 				buffer.clear();
 				
 			} catch (UnsupportedEncodingException encode_ex) {
-				encode_ex.printStackTrace();
+				System.out.println("Error in message encoding: " + encode_ex.getMessage());
 			} catch (IOException io_ex) {
-				io_ex.printStackTrace();
+				System.out.println("Notification channel error: " + io_ex.getCause());
 				Thread.currentThread().interrupt();
 			} catch (InterruptedException interrupt_ex) {
-				System.out.println("Notification handler stopped");
-				return;
+				try {
+					notification_ch.close();
+					System.out.println("Notification service stopped");
+					return;
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+				
 			}
 		}
 	}
@@ -89,7 +95,7 @@ public class NotificationHandler implements Runnable {
 		cloesButton.setFocusable(false);
 		frame.add(cloesButton, constraints);
 		
-		// Notification pop-up will be closed after 5 seconds it has been shown
+		// Notification pop-up will be closed after 5 seconds
 		Timer timer = new Timer(5000, new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
 				frame.dispose();

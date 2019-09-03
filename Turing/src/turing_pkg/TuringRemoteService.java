@@ -5,6 +5,7 @@ import java.rmi.RemoteException;
 
 public interface TuringRemoteService extends Remote {
 
+	/* remote account registration method */
 	boolean registerOP (String username, char[] password) throws RemoteException;
 	
 }

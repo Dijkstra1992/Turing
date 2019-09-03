@@ -20,20 +20,20 @@ final class Config {
 //	public static final String FILE_PATH			= ""; // insert local DB path here
 	
 	/* request type codes */
-	public static final byte LOGIN_R		= (byte) 0x000;			// login request
-	public static final byte LOGOUT_R 		= (byte) 0x001;			// logout request
-	public static final byte NEW_R	 		= (byte) 0x002;			// create new document request
-	public static final byte EDIT_R			= (byte) 0x003; 		// edit an existing document request
-	public static final byte END_EDIT_R		= (byte) 0x004; 		// close editing section request
-	public static final byte SHARE_R 		= (byte) 0x005;			// share document request
-	public static final byte LIST_R			= (byte) 0x006; 		// lists all proprietary/shared files
-	public static final byte SHOW_R		 	= (byte) 0x007; 		// download section request
-	public static final byte SAVE_R			= (byte) 0x008; 		// save edited section request
-	public static final byte NOTIFY_SERV_R  = (byte) 0x009;			// notification service start request
+	public static final byte LOGIN_R		= (byte) 0x000;
+	public static final byte LOGOUT_R 		= (byte) 0x001;
+	public static final byte NEW_R	 		= (byte) 0x002;
+	public static final byte EDIT_R			= (byte) 0x003;
+	public static final byte END_EDIT_R		= (byte) 0x004;
+	public static final byte SHARE_R 		= (byte) 0x005;
+	public static final byte LIST_R			= (byte) 0x006;
+	public static final byte SHOW_R		 	= (byte) 0x007;
+	public static final byte SAVE_R			= (byte) 0x008;
+	public static final byte NOTIFY_SERV_R  = (byte) 0x009;	
 	
 		
 	/* response & error codes */
-	public static final byte SUCCESS 	 	= (byte) 0x100;
+	public static final byte SUCCESS 	 	= (byte) 0x100;			
 	public static final byte INVALID_PASS	= (byte) 0x101;
 	public static final byte ALREADY_ON 	= (byte) 0x102;
 	public static final byte UNKNOWN_USER	= (byte) 0x103;
@@ -41,9 +41,10 @@ final class Config {
 	public static final byte NO_SUCH_FILE	= (byte) 0x105;
 	public static final byte INVALID_DEST   = (byte) 0x106;
 	public static final byte EMPTY_LIST		= (byte) 0x107;
-	public static final byte INVALID_SECT	= (byte) 0x108;
+	public static final byte COM_ERROR		= (byte) 0x108;
 	public static final byte RECEIVING_BYTES= (byte) 0x109;
 	public static final byte NO_BYTES 		= (byte) 0x110;
+	public static final byte DUPLICATE_FILE = (byte) 0x111;
 	
 	/* file permissions */
 	public static final byte CREATOR		= (byte) 0x200;
@@ -52,11 +53,6 @@ final class Config {
 	/* file section status */
 	public static final byte FREE_SECTION	= (byte) 0x250;
 	public static final byte IN_EDIT		= (byte) 0x251;
-	
-	/* CLIENT status codes */
-	public static final byte OFFLINE		= (byte) 0;
-	public static final byte ONLINE			= (byte) 1;
-	public static final byte EDITING		= (byte) 2;
 	
 	private Config () {}
 	 
@@ -77,11 +73,17 @@ final class Config {
 			case NO_SUCH_FILE:
 				log = "File not found!";
 				break;
+			case DUPLICATE_FILE:
+				log = "User has already this file";
+				break;
 			case INVALID_DEST:
 				log = "Invalid destinatary";
 				break;
 			case EMPTY_LIST:
 				log = "No documents yet";
+				break;
+			case COM_ERROR:
+				log = "Connection error";
 				break;
 			default: 
 				log = "Unknown error occurred!";

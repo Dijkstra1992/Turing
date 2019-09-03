@@ -38,15 +38,15 @@ import turing_pkg.Config;
 public class TuringServer {
 	
 	public static Map<String, User> usersDB; 	 						// registered users (<username, User>)
-	public static Lock dbLock;											// usersDB lock for mutual exclusion access
+	public static Lock dbLock;											// usersDB lock
 	private static Map<String, SocketChannel> loggedUsers;				// online users (<username, client_socket_channel>)
 	private static Map<String, String> editingSessions;					// list of currently open sections for editing (<file_section_name, username>)
-	private static Map<String, ChatGroup> chatGroups;					// for chat groups managing (<filename, chatgroup object>)
+	private static Map<String, ChatGroup> chatGroups;					// chat groups (<filename, chatgroup object>)
 	private static Map<String, ArrayList<String>> pendingNotifications;	// <username, notification_messages_list>
 	private static ServerSocketChannel server_ch = null;
 	private static Selector ch_selector = null;
 	
-	
+	/* main accept routine method */
 	public static void main(String[] args) throws InterruptedException, IOException {
 		
 		/* Server socket init */
@@ -125,20 +125,19 @@ public class TuringServer {
 		} 
 	}
 
-	/* Reds incoming request message from 'client' SocketChannel and calls the corresponding serving function */
+	/* Reads incoming request message from 'client' SocketChannel and calls the corresponding request processing function */
 	private static void readRequest(SocketChannel client, ByteBuffer request) throws Exception {
 
-		ByteBuffer buffer = null;
-		
-		// reads all data received on the socket for the current client request message
+		ByteBuffer buffer = null; 
 		ByteArrayOutputStream byte_stream = new ByteArrayOutputStream();
 		byte[] r_bytes;	// array cointaining all received bytes
 		int total_read = 0;
-		while ( client.read(request) > 0) {
+		// reads all data received on the socket for the current client request message
+		while ( client.read(request) > 0) { // reads up to Config.BUF_SIZE bytes and saves them into 'request' buffer
 			total_read += request.position();
 			request.flip();
 			r_bytes = request.array();
-			byte_stream.write(r_bytes);
+			byte_stream.write(r_bytes); // temp cumulative buffer
 			request.clear();
 		}
 		if (total_read == 0) {
@@ -147,10 +146,10 @@ public class TuringServer {
 		}
 		byte[] request_bytes = byte_stream.toByteArray();
 		byte_stream.close();
-		buffer = ByteBuffer.allocate(request_bytes.length);
+		buffer = ByteBuffer.allocate(request_bytes.length);	// transfer entire message into 'buffer' for further data extraction
+
 		buffer.put(request_bytes);
 		buffer.flip();
-
 
 		byte r_type, user_s, pass_s;
 		byte[] username, file_name, dest_name, text_b;
@@ -160,14 +159,14 @@ public class TuringServer {
 		User currentUser;
 		Document currentDoc;
 		
+		// Start decoding request message and extracting data
 		r_type = buffer.get(); // reads request type code
-		/* processing client request */
-		switch (r_type) {
+		switch (r_type) {// decoding client request 
 		
 			/* login request */
 			case Config.LOGIN_R :
 				user_s = buffer.get();
-				pass_s = buffer.get(); //password length				
+				pass_s = buffer.get(); 			
 				username = new byte[user_s];
 		 		buffer.get(username, 0, user_s);
 				user = new String(username, Config.DEFAULT_ENCODING);				
@@ -287,8 +286,7 @@ public class TuringServer {
 					putUserInGroup(client, file, user);				// adds user to chat group 
 					currentDoc.setStatus(Config.IN_EDIT, section);
 					editingSessions.put(new String(file + "_" + section), user);
-					currentUser.setSessionStatus(file, section);
-					System.out.println("User " + user + " requested file section " + section + " of file" + file + " (EDIT MODE)");
+					System.out.println("User " + user + " requested file section " + section + " of file " + file + " (EDIT MODE)");
 				}
 				break;
 				
@@ -309,7 +307,7 @@ public class TuringServer {
 				currentDoc = currentUser.getDocument(file);
 				currentDoc.setStatus(Config.FREE_SECTION, section);
 				System.out.println("User " + user + " terminated editing on file " + file + ", section " + section);
-				removeUserFromGroup(user, file);	// removes user from chat groups. NOTE: deletes the group if no other users are working on it
+				removeUserFromGroup(user, file);
 				break;
 				
 			/* gets new file version from client */
@@ -371,7 +369,7 @@ public class TuringServer {
 			return false;
 		}
 		
-		// checking password validity
+		// checking password 
 		User user = usersDB.get(username);
 		dbLock.unlock();
 		char[] pass = user.getPass();
@@ -399,6 +397,15 @@ public class TuringServer {
 	/* Creates a new document */
 	private static void newDocCreate(SocketChannel client, String username, String filename, int sections) {
 		
+		dbLock.lock();
+		User user = usersDB.get(username);
+		dbLock.unlock();
+		
+		if (user.getDocument(filename) != null) {
+			sendResponse(client, Config.DUPLICATE_FILE);
+			return;
+		}
+		
 		String pathName = new String(Config.FILE_PATH + username + "\\" + filename);
 		Path savePath = Paths.get(pathName);
 		try {
@@ -412,15 +419,13 @@ public class TuringServer {
 			sendResponse(client, Config.UNKNOWN_ERROR);
 		}
 		
-		dbLock.lock();
-		User user = usersDB.get(username);
-		dbLock.unlock();
+		
 		Document document = new Document(filename, username, sections, Config.CREATOR);
 		user.addFile(document);
 		sendResponse(client, Config.SUCCESS);
 	}
 	
-	/* Sends a list of all proprietary and authorized documents for this user */
+	/* Sends a list of all proprietary and shared documents with this user */
 	private static void listDocs(SocketChannel client, String username) {
 		if ( !loggedUsers.containsKey(username)) {
 			sendResponse(client, Config.UNKNOWN_USER);
@@ -459,7 +464,7 @@ public class TuringServer {
 		}		
 	}
 	
-	/* Adds document 'file' to receivers documents list */
+	/* Adds document 'file' to 'receiver' documents list */
 	private static boolean shareDoc(SocketChannel client, String sender, String receiver, String file) {
 		
 		if (sender.equals(receiver)) { 
@@ -476,7 +481,7 @@ public class TuringServer {
 		}
 		
 		if ( recvr.getDocument(file) != null) {
-			sendResponse(client, Config.INVALID_DEST);
+			sendResponse(client, Config.DUPLICATE_FILE);
 			return false;
 		}
 		
@@ -644,7 +649,7 @@ public class TuringServer {
 		try {
 			DatagramSocket socket = new DatagramSocket();
 			InetAddress address = InetAddress.getByName(group_address);
-			String text = "'" + username + "' joined group\n";
+			String text = "\t(" + username + " joined group)";
 			byte[] buffer = new byte[256];
 			buffer = text.getBytes(Config.DEFAULT_ENCODING);
 			DatagramPacket packet = new DatagramPacket(buffer, buffer.length, address, Config.CHAT_SERVICE_PORT);
@@ -653,7 +658,7 @@ public class TuringServer {
 		} catch (IOException io_ex) { io_ex.printStackTrace(); }
 	}
 	
-	/* Removes user 'username' from the chat group he was previously added to*/
+	/* Removes user 'username' from the chat group. NOTE: deletes the group if no other users are working in it*/
 	private static void removeUserFromGroup(String username, String filename) {
 		ChatGroup group = chatGroups.get(filename);
 		group.removeUser(username);
@@ -666,7 +671,7 @@ public class TuringServer {
 			try {
 				DatagramSocket socket = new DatagramSocket();
 				InetAddress address = InetAddress.getByName(group_address);
-				String text = "'" + username + "' left group\n";
+				String text = "\t(" + username + " left group)";
 				byte[] buffer = new byte[256];
 				buffer = text.getBytes(Config.DEFAULT_ENCODING);
 				DatagramPacket packet = new DatagramPacket(buffer, buffer.length, address, Config.CHAT_SERVICE_PORT);

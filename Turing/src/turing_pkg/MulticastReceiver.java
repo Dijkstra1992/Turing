@@ -48,9 +48,9 @@ public class MulticastReceiver extends Thread {
 			socket.close();
 			return;
 		} catch (SocketException sock_ex) {
-			System.out.println("Chat socket closed");
+			System.out.println("Chat socket closed: " + sock_ex.getCause());
 		} catch (IOException io_ex) {
-			io_ex.printStackTrace();
+			System.out.println("Error leaving chat group: " + io_ex.getCause());
 		}
 		
 	}

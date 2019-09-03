@@ -11,8 +11,6 @@ public class User {
 	private char[] password;
 	private ArrayList<Document> documents;
 	private SocketChannel notification_ch;
-	private String currentSession = null;
-	private int sessionIndex = -1;
 	
 	public User (String username, char[] password) {
 		this.username = new String(username);
@@ -55,25 +53,4 @@ public class User {
 		return this.notification_ch;
 	}
 	
-	public void setSessionStatus(String file_section_name, int index) {
-		if (file_section_name == null) {
-			currentSession = null;
-		}
-		else {
-			currentSession = new String(file_section_name);
-		}
-		sessionIndex = index;
-	}
-	
-	public boolean hasOpenSessions() {
-		return (currentSession != null);
-	}
-
-	public String getOpenSessionName() {
-		return currentSession;
-	}
-	
-	public int getOpenSessionIndex() {
-		return sessionIndex;
-	}
 } 

@@ -16,43 +16,42 @@ final class Config {
 	public static final int NOTIFY_SERVICE_PORT 	= 3029;
 	public static final String SERVER_IP 	     	= "127.0.0.1";  
 	public static final String DEFAULT_ENCODING	 	= "UTF-8";
-	public static final String FILE_PATH 		 	= "C:\\Users\\Pietro\\Desktop\\TuringProjectWS\\TuringDB\\"; 
-//	public static final String FILE_PATH			= ""; // insert local DB path here
+	public static final String FILE_PATH 		 	= "C:\\Users\\Pietro\\Desktop\\Turing\\TuringDB\\"; 
 	
 	/* request type codes */
-	public static final byte LOGIN_R		= (byte) 0x000;
-	public static final byte LOGOUT_R 		= (byte) 0x001;
-	public static final byte NEW_R	 		= (byte) 0x002;
-	public static final byte EDIT_R			= (byte) 0x003;
-	public static final byte END_EDIT_R		= (byte) 0x004;
-	public static final byte SHARE_R 		= (byte) 0x005;
-	public static final byte LIST_R			= (byte) 0x006;
-	public static final byte SHOW_R		 	= (byte) 0x007;
-	public static final byte SAVE_R			= (byte) 0x008;
-	public static final byte NOTIFY_SERV_R  = (byte) 0x009;	
+	public static final byte LOGIN_R		= (byte) 10;
+	public static final byte LOGOUT_R 		= (byte) 11;
+	public static final byte NEW_R	 		= (byte) 12;
+	public static final byte EDIT_R			= (byte) 13;
+	public static final byte END_EDIT_R		= (byte) 14;
+	public static final byte SHARE_R 		= (byte) 15;
+	public static final byte LIST_R			= (byte) 16;
+	public static final byte SHOW_R		 	= (byte) 17;
+	public static final byte SAVE_R			= (byte) 18;
+	public static final byte NOTIFY_SERV_R  = (byte) 19;	
 	
 		
 	/* response & error codes */
-	public static final byte SUCCESS 	 	= (byte) 0x100;			
-	public static final byte INVALID_PASS	= (byte) 0x101;
-	public static final byte ALREADY_ON 	= (byte) 0x102;
-	public static final byte UNKNOWN_USER	= (byte) 0x103;
-	public static final byte UNKNOWN_ERROR 	= (byte) 0x104;
-	public static final byte NO_SUCH_FILE	= (byte) 0x105;
-	public static final byte INVALID_DEST   = (byte) 0x106;
-	public static final byte EMPTY_LIST		= (byte) 0x107;
-	public static final byte COM_ERROR		= (byte) 0x108;
-	public static final byte RECEIVING_BYTES= (byte) 0x109;
-	public static final byte NO_BYTES 		= (byte) 0x110;
-	public static final byte DUPLICATE_FILE = (byte) 0x111;
+	public static final byte SUCCESS 	 	= (byte) 50;			
+	public static final byte INVALID_PASS	= (byte) 51;
+	public static final byte ALREADY_ON 	= (byte) 52;
+	public static final byte UNKNOWN_USER	= (byte) 53;
+	public static final byte UNKNOWN_ERROR 	= (byte) 54;
+	public static final byte NO_SUCH_FILE	= (byte) 55;
+	public static final byte INVALID_DEST   = (byte) 56;
+	public static final byte EMPTY_LIST		= (byte) 57;
+	public static final byte COM_ERROR		= (byte) 58;
+	public static final byte RECEIVING_BYTES= (byte) 59;
+	public static final byte NO_BYTES 		= (byte) 60;
+	public static final byte DUPLICATE_FILE = (byte) 61;
 	
 	/* file permissions */
-	public static final byte CREATOR		= (byte) 0x200;
-	public static final byte SHARED			= (byte) 0x201;
+	public static final byte CREATOR		= (byte) 100;
+	public static final byte SHARED			= (byte) 101;
 	
 	/* file section status */
-	public static final byte FREE_SECTION	= (byte) 0x250;
-	public static final byte IN_EDIT		= (byte) 0x251;
+	public static final byte FREE_SECTION	= (byte) 120;
+	public static final byte IN_EDIT		= (byte) 121;
 	
 	private Config () {}
 	 

@@ -29,8 +29,8 @@ final class Config {
 	public static final byte SHOW_R		 	= (byte) 17;
 	public static final byte SAVE_R			= (byte) 18;
 	public static final byte NOTIFY_SERV_R  = (byte) 19;	
-	
-		
+	public static final byte CHAT_ADDRESS_R = (byte) 20;
+
 	/* response & error codes */
 	public static final byte SUCCESS 	 	= (byte) 50;			
 	public static final byte INVALID_PASS	= (byte) 51;
@@ -44,6 +44,7 @@ final class Config {
 	public static final byte RECEIVING_BYTES= (byte) 59;
 	public static final byte NO_BYTES 		= (byte) 60;
 	public static final byte DUPLICATE_FILE = (byte) 61;
+	public static final byte INVALID_PERM	= (byte) 62;
 	
 	/* file permissions */
 	public static final byte CREATOR		= (byte) 100;
@@ -83,6 +84,9 @@ final class Config {
 				break;
 			case COM_ERROR:
 				log = "Connection error";
+				break;
+			case INVALID_PERM:
+				log = "Permission denied!";
 				break;
 			default: 
 				log = "Unknown error occurred!";

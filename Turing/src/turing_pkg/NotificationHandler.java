@@ -19,7 +19,7 @@ public class NotificationHandler implements Runnable {
 	
 	private static SocketChannel notification_ch = null;
 	int size;
-	byte[] data;
+	byte data[] = null;
 	
 	public NotificationHandler(SocketChannel channel) {
 		notification_ch = channel;
@@ -28,10 +28,11 @@ public class NotificationHandler implements Runnable {
 	@Override
 	public void run() {
 		ByteBuffer buffer = ByteBuffer.allocate(Config.BUF_SIZE);
+		
 		while(!Thread.currentThread().isInterrupted()) {
 			try {
-				while ((notification_ch.read(buffer)) <= 0) {
-					Thread.sleep(1500);
+				while (notification_ch.read(buffer) <= 0) {
+					Thread.sleep(1000);
 				}
 				buffer.flip();
 				size = buffer.getInt();
@@ -49,7 +50,6 @@ public class NotificationHandler implements Runnable {
 			} catch (InterruptedException interrupt_ex) {
 				try {
 					notification_ch.close();
-					System.out.println("Notification service stopped");
 					return;
 				} catch (IOException e) {
 					e.printStackTrace();
@@ -61,6 +61,11 @@ public class NotificationHandler implements Runnable {
 	
 	private void displayNotification(String message) {
 		
+		try {
+			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 		JFrame frame = new JFrame();
 		frame.setSize(300,125);
 		frame.setUndecorated(true);

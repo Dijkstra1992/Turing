@@ -8,6 +8,7 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -34,8 +35,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 
-/* my utility class */
-import turing_pkg.Config;
+//import turing_pkg.Config;
 
 public class TuringServer {
 	
@@ -45,7 +45,6 @@ public class TuringServer {
 	private static Map<String, String> editingSessions;					// list of currently open sections for editing (<file_section_name, username>)
 	private static Map<String, ChatGroup> chatGroups;					// chat groups (<filename, chatgroup object>)
 	private static Map<String, ArrayList<String>> pendingNotifications;	// <username, notification_messages_list>
-	private static Map<SocketChannel, byte[]> pendingResponses;			// queue of pending responses to be send
 	private static ServerSocketChannel server_ch = null;
 	private static Selector ch_selector = null;
 	
@@ -69,11 +68,15 @@ public class TuringServer {
 		editingSessions = new HashMap<String, String>();
 		chatGroups = new HashMap<String, ChatGroup>();
 		pendingNotifications = new HashMap<String, ArrayList<String>>();
-		pendingResponses = new HashMap<SocketChannel, byte[]>();
 		Set<SelectionKey> key_set;
 		Iterator<SelectionKey> key_iterator;
 
 		/* Clean up any existing files from previous executions */
+		if (Config.FILE_PATH.compareTo("") == 0) {
+			System.err.println("Need to set local storage path first! \n "
+					+ "(In file 'Config.java' -> FILE_PATH)");
+			System.exit(0);
+		}
 		System.out.println("Removing previous execution files...");
 		cleanUpUtility(Paths.get(Config.FILE_PATH));
 		System.out.println("Done!");
@@ -98,15 +101,15 @@ public class TuringServer {
 					SelectionKey ready_key = key_iterator.next();
 					key_iterator.remove();
 
-					if ( ready_key.isAcceptable() ) {
-
+					if ( ready_key.isAcceptable() ) { // new connection request
+						
 						SocketChannel client = server_ch.accept();
 						client.configureBlocking(false);
 						client.register(ch_selector, SelectionKey.OP_READ);
 						
 					}
 					
-					else if ( ready_key.isReadable() ) {
+					else if ( ready_key.isReadable() ) { // request message from client
 						
 						SocketChannel client = (SocketChannel) ready_key.channel();
 						try { 
@@ -114,24 +117,33 @@ public class TuringServer {
 							readRequest(client, buffer);
 
 						}
-						catch (UnsupportedEncodingException encode_ex) {
-							encode_ex.printStackTrace();
-						}
+						
 						catch (IOException io_ex) {
 							disconnectClient(client);
 							client.close();
 							ready_key.cancel();
 						}
+						catch (BufferUnderflowException message_read_ex) {
+							byte[] err_response = new byte[1];
+							err_response[0] = Config.UNKNOWN_ERROR;
+							ready_key.attach(err_response);
+							ready_key.interestOps(SelectionKey.OP_WRITE);
+							System.err.println("Error occured while receiving request from host " +
+												client.getRemoteAddress() + "\n" + 
+												"ERROR_INFO: " + message_read_ex.getMessage());
+						}
 					}	
 					
-					else if ( ready_key.isWritable() ) {
+					else if ( ready_key.isWritable() ) { // client ready to receive response
 
 						SocketChannel client = (SocketChannel) ready_key.channel();
 						byte[] response_b = (byte[]) ready_key.attachment();
 						ByteBuffer responseBuffer = ByteBuffer.allocate(response_b.length);
 						responseBuffer.put(response_b);
 						responseBuffer.flip();
-						client.write(responseBuffer);
+						while (responseBuffer.hasRemaining() ) {
+							client.write(responseBuffer);
+						}
 						ready_key.interestOps(SelectionKey.OP_READ);
 
 					}
@@ -150,28 +162,21 @@ public class TuringServer {
 		ByteBuffer buffer = null; 
 		ByteArrayOutputStream byte_stream = new ByteArrayOutputStream();
 		byte[] r_bytes;	// array cointaining all received bytes
-		int total_read = 0;
 		// reads all data received on the socket for the current client request message
-		while ( client.read(request) > 0) { // reads up to Config.BUF_SIZE bytes and saves them into 'request' buffer
-			total_read += request.position();
+		while ( client.read(request) > 0) {
 			request.flip();
 			r_bytes = request.array();
 			byte_stream.write(r_bytes); // temp cumulative buffer
 			request.clear();
 		}
-		if (total_read == 0) {
-			response = new byte[1];
-			response[0] = Config.UNKNOWN_ERROR; 
-			pendingResponses.put(client, response);
-			throw new IOException();
-		}
+		
 		byte[] request_bytes = byte_stream.toByteArray();
 		byte_stream.close();
 		buffer = ByteBuffer.allocate(request_bytes.length);	// transfer entire message into 'buffer' for further data extraction
 
 		buffer.put(request_bytes);
 		buffer.flip();
-
+		
 		byte r_type, user_s, pass_s;
 		byte[] username, file_name, dest_name, text_b;
 		byte file_name_s, dest_name_s;
@@ -364,7 +369,7 @@ public class TuringServer {
 				
 			/* sets up a notification channel for the client */
 			case Config.NOTIFY_SERV_R:
-				user_s = buffer.get();
+				user_s = buffer.get(); 
 				username = new byte[user_s];
 				buffer.get(username, 0, user_s);
 				user = new String(username, Config.DEFAULT_ENCODING);
@@ -395,7 +400,7 @@ public class TuringServer {
 				}
 				client.keyFor(ch_selector).attach(response);
 				client.keyFor(ch_selector).interestOps(SelectionKey.OP_WRITE);
-				break;
+				break; 
 				
 			default	: 
 				System.out.print("UNKNOWN REQUEST CODE\n");
@@ -476,7 +481,8 @@ public class TuringServer {
 				Files.createFile(filePath);
 			}
 		} catch (IOException io_ex) {
-			io_ex.printStackTrace();
+			System.err.println("File creation failed! \n "
+					+ "ERROR_INFO: " + io_ex.getMessage());
 			response = new byte[1];
 			response[0] = Config.UNKNOWN_ERROR;
 			client.keyFor(ch_selector).attach(response);	
@@ -540,6 +546,8 @@ public class TuringServer {
 			client.keyFor(ch_selector).attach(response_b);
 			client.keyFor(ch_selector).interestOps(SelectionKey.OP_WRITE);
 		} catch (IOException io_ex) {
+			System.err.println("Failed to retrieve users data! \n "
+					+ "ERROR_INFO: " + io_ex.getMessage());
 			io_ex.printStackTrace();
 			response_b[0] = Config.UNKNOWN_ERROR;
 			client.keyFor(ch_selector).attach(response_b);
@@ -563,16 +571,9 @@ public class TuringServer {
 		dbLock.lock();
 		User recvr = usersDB.get(receiver);
 		dbLock.unlock();
-		if ( recvr == null) { 
+		if ( recvr == null) { // receiver does not exist
 			response = new byte[1];
 			response[0] = Config.UNKNOWN_USER;
-			client.keyFor(ch_selector).attach(response);
-			return false;
-		}
-		
-		if ( recvr.getDocument(file) != null) {
-			response = new byte[1];
-			response[0] = Config.DUPLICATE_FILE;
 			client.keyFor(ch_selector).attach(response);
 			return false;
 		}
@@ -581,15 +582,16 @@ public class TuringServer {
 		User sendr = usersDB.get(sender);
 		dbLock.unlock();
 		Document source = sendr.getDocument(file);
-		if (source == null) {
-			response = new byte[1];
-			response[0] = Config.NO_SUCH_FILE;
-			client.keyFor(ch_selector).attach(response);
-			return false;
-		}
-		if ( (source.getOwner().compareTo(sender)) != 0) {
+		
+		if ( (source.getOwner().compareTo(sender)) != 0) { // sender is not the owner of the file
 			response = new byte[1];
 			response[0] = Config.INVALID_PERM;
+			client.keyFor(ch_selector).attach(response);
+			return false;
+			
+		} else if ( recvr.getDocument(file) != null) { // receiver has already this file
+			response = new byte[1];
+			response[0] = Config.DUPLICATE_FILE;
 			client.keyFor(ch_selector).attach(response);
 			return false;
 		}
@@ -649,7 +651,8 @@ public class TuringServer {
 			client.keyFor(ch_selector).interestOps(SelectionKey.OP_WRITE);
 
 		} catch (UnsupportedEncodingException e) {
-			e.printStackTrace();
+			System.err.println("Sending file to user " + username + " failed! \n "
+					+ "ERROR_INFO: " + e.getMessage());
 		}
 	}
 	
@@ -669,7 +672,8 @@ public class TuringServer {
 			Path filePath = Paths.get(pathName + "\\" + filename + "_" + Integer.toString(section) + ".txt");
 			Files.write(filePath, file_text, StandardOpenOption.WRITE);
 		} catch (IOException io_ex) {
-			io_ex.printStackTrace();
+			System.err.println("Error occured while writing file to local storage! \n "
+					+ "ERROR_INFO: " + io_ex.getMessage());
 			response[0] = Config.UNKNOWN_ERROR;
 			client.keyFor(ch_selector).attach(response);
 			client.keyFor(ch_selector).interestOps(SelectionKey.OP_WRITE);
@@ -704,7 +708,8 @@ public class TuringServer {
 			paths.close();
 			return text;
 		} catch (IOException io_ex) {
-			io_ex.printStackTrace();
+			System.err.println("Error occured while loding file '" + filename + "' \n "
+					+ "ERROR_INFO: " + io_ex.getMessage());
 			return null;
 		}
 	}
@@ -721,7 +726,8 @@ public class TuringServer {
 		try {
 			text = text.concat(new String(Files.readAllBytes(filePath)));
 		} catch (IOException io_ex) {
-			io_ex.printStackTrace();
+			System.err.println("Error occured while loding file '" + filename + "' \n "
+					+ "ERROR_INFO: " + io_ex.getMessage());
 		}
 		return text;
 	}
@@ -758,7 +764,9 @@ public class TuringServer {
 			client.keyFor(ch_selector).interestOps(SelectionKey.OP_WRITE);
 			System.out.println("User " + username + " added to work group of document " + filename);
 		} catch (UnsupportedEncodingException encode_ex) {
-			encode_ex.printStackTrace();
+			System.err.println("Error occured while adding user '" + username + "' to file work-group!\n "
+					+ "ERROR_INFO: " + encode_ex.getMessage());
+			chatGroups.get(filename).removeUser(username);
 		}
 		
 	}
@@ -783,7 +791,10 @@ public class TuringServer {
 				DatagramPacket packet = new DatagramPacket(buffer, buffer.length, address, Config.CHAT_SERVICE_PORT);
 				socket.send(packet);
 				socket.close();
-			} catch (IOException io_ex) { io_ex.printStackTrace(); }
+			} catch (IOException io_ex) { 
+				System.err.println("Removing user '" + username + "' failed! \n "
+						+ "ERROR_INFO: " + io_ex.getMessage());
+			}
 		}
 		
 	}
@@ -826,7 +837,7 @@ public class TuringServer {
 	
 	/* Recursively deletes all folders & files up to 'path' folder */
 	private static void cleanUpUtility(Path path) throws IOException {
-		
+				
 		if (Files.exists(path)) {
 			if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
 				try (DirectoryStream<Path> entries = Files.newDirectoryStream(path)) {

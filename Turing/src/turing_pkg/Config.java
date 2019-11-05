@@ -16,7 +16,7 @@ final class Config {
 	public static final int NOTIFY_SERVICE_PORT 	= 3029;
 	public static final String SERVER_IP 	     	= "127.0.0.1";  
 	public static final String DEFAULT_ENCODING	 	= "UTF-8";
-	public static final String FILE_PATH 		 	= "C:\\Users\\Pietro\\Desktop\\Turing\\TuringDB\\"; 
+	public static final String FILE_PATH 		 	= ""; 
 	
 	/* request type codes */
 	public static final byte LOGIN_R		= (byte) 10;
@@ -68,7 +68,7 @@ final class Config {
 				log = "User already online";
 				break;
 			case UNKNOWN_USER:
-				log = "Unknown user";
+				log = "Unknown user"; 
 				break;
 			case NO_SUCH_FILE:
 				log = "File not found!";

@@ -32,7 +32,7 @@ public class NotificationHandler implements Runnable {
 		while(!Thread.currentThread().isInterrupted()) {
 			try {
 				while (notification_ch.read(buffer) <= 0) {
-					Thread.sleep(1000);
+					Thread.sleep(1000); 
 				}
 				buffer.flip();
 				size = buffer.getInt();
@@ -59,7 +59,7 @@ public class NotificationHandler implements Runnable {
 		}
 	}
 	
-	private void displayNotification(String message) {
+	public static void displayNotification(String message) {
 		
 		try {
 			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());

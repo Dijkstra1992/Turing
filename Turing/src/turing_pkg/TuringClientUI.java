@@ -29,7 +29,6 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.nio.BufferOverflowException;
@@ -133,7 +132,7 @@ public class TuringClientUI {
 					initGUI();
 					CLIENT_STATUS = OFFLINE;
 					Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
-					mainFrame.setLocation(dim.width/2-mainFrame.getSize().width/2, dim.height/2-mainFrame.getSize().height/2);
+					mainFrame.setLocation(dim.width/2-mainFrame.getSize().width, dim.height/2-mainFrame.getSize().height/2);
 					mainFrame.setVisible(true);
 				} catch (Exception e) {
 					e.printStackTrace();
@@ -386,18 +385,19 @@ public class TuringClientUI {
 			JOptionPane.showMessageDialog(mainFrame, "Error retrieving file list", "ERROR", JOptionPane.ERROR_MESSAGE);
 		}
 		if (rcv_files != null) {
-			JDialog listDialog = fileExplorer();
+			JDialog explorer = fileExplorer();
 			Iterator<String> f_iter = rcv_files.iterator();
 			while (f_iter.hasNext()) {
 				String current_file = (String) f_iter.next();
 				int current_sect = Integer.parseInt((String) f_iter.next(), 10);
 				list.addElement(current_file);
-				if (!documents.containsKey(current_file)) { //adding file to client's local documents list if needed
+				if (!documents.containsKey(current_file)) { // adding file to client's local documents list
 					documents.put(current_file, current_sect);
 				}
 			}
-			listDialog.setLocationRelativeTo(mainFrame);
-			listDialog.setVisible(true);
+			explorer.setSize(240, 640);
+			explorer.setLocation(mainFrame.getX()-explorer.getWidth(), mainFrame.getY());
+			explorer.setVisible(true);
 			return true;
 		} else {
 			return false;
@@ -580,7 +580,6 @@ public class TuringClientUI {
 				/* connecting to server and sending a login request */
 				InetSocketAddress server_address = new InetSocketAddress(Config.SERVER_IP, Config.SERVER_PORT);
 				try {
-					/* Open comunication and data transfer socket channel */
 					client_ch = SocketChannel.open(server_address);
 					client_ch.configureBlocking(false);
 					loginRequest(username, password);
@@ -809,10 +808,10 @@ public class TuringClientUI {
 		
 		mntmShowSection.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
-//				if ( viewerWindow!=null && viewerWindow.isVisible()) {
-//					JOptionPane.showMessageDialog(null, "Need to close current open file first");
-//					return;
-//				}
+				if ( viewerWindow!=null && viewerWindow.isVisible()) {
+					JOptionPane.showMessageDialog(null, "Need to close current open file first");
+					return;
+				}
 				String selected_file = new String(file_explorer.getSelectedValue());
 				JPopupMenu popup = showSectionPopupMenu(selected_file, documents.get(selected_file));
 				popup.setLocation(MouseInfo.getPointerInfo().getLocation());
@@ -823,10 +822,10 @@ public class TuringClientUI {
 		
 		mntmShow.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent evt) {
-//				if ( viewerWindow!=null && viewerWindow.isVisible()) {
-//					JOptionPane.showMessageDialog(null, "Need to close current open file first");
-//					return;
-//				}
+				if ( viewerWindow!=null && viewerWindow.isVisible()) {
+					JOptionPane.showMessageDialog(null, "Need to close current file-viewer window first!");
+					return;
+				}
 				String selected_file = new String(file_explorer.getSelectedValue());
 				try {
 					String text = downloadRequest(selected_file, -1, Config.SHOW_R);
@@ -1102,12 +1101,8 @@ public class TuringClientUI {
 				JOptionPane.showMessageDialog(mainFrame, "Logout succeeded");
 			}
 		} catch (IOException req_ex) {
-			if (!serverOnline()) {
-				JOptionPane.showMessageDialog(mainFrame, "Server unreachable");
-				disableOnlineService();
-			} else {
-				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
-			}
+			JOptionPane.showMessageDialog(mainFrame, "Server unreachable");
+			disableOnlineService();
 			return;
 		}
 		
@@ -1130,12 +1125,8 @@ public class TuringClientUI {
 		try {
 			client_ch.write(request);
 		} catch (IOException req_ex) {
-			if (!serverOnline()) {
-				JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
-				disableOnlineService();
-			} else {
-				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
-			}
+			JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
+			disableOnlineService();
 			return;
 		}
 	}
@@ -1168,7 +1159,6 @@ public class TuringClientUI {
 					try { 
 						String current_file = new String(s_tok.nextToken());
 						String current_sect = new String(s_tok.nextToken());
-						System.out.println("Current file/sections: " + current_file + "/" + current_sect);
 						received_files.add(current_file);
 						received_files.add(current_sect);
 					} catch (NoSuchElementException end_ex) {} // last element is just a delimiter token	
@@ -1176,12 +1166,8 @@ public class TuringClientUI {
 				return received_files;
 			}
 		} catch (IOException req_ex) {
-			if (!serverOnline()) {
-				JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
-				disableOnlineService();
-			} else {
-				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
-			}
+			JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
+			disableOnlineService();
 			return null;		
 		}
 	}
@@ -1206,12 +1192,9 @@ public class TuringClientUI {
 		try {
 			client_ch.write(request);
 		} catch (IOException req_ex) {
-			if (!serverOnline()) {
-				JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
-				disableOnlineService();
-			} else {
-				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
-			}
+			JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
+			disableOnlineService();
+			JOptionPane.showMessageDialog(mainFrame, "Check your connection");
 			return;
 		}
 	}
@@ -1240,13 +1223,10 @@ public class TuringClientUI {
 		try {
 			client_ch.write(request);
 			response = getResponse(client_ch);
-			System.out.println("Received response (" + response.length + " bytes)");
 			data = ByteBuffer.allocate(response.length);
 			data.put(response);
 			data.flip();
-			System.out.println("Remaining data: " + data.remaining() + " bytes [INIT]");
 			r_code = data.get();
-			System.out.println("Remaining data: " + data.remaining() + " bytes [OP_CODE_EXTRACTED]");
 			if (r_code == Config.IN_EDIT) {
 				int editor_name_s = data.getInt();
 				byte[] editor_name_b = new byte[editor_name_s];
@@ -1256,13 +1236,9 @@ public class TuringClientUI {
 				return null;
 			} else {
 				text_size = data.getInt();
-				System.out.println("Remaining data: " + data.remaining() + " bytes [TEXT_SIZE EXTRACTED (int)]");
 				if (text_size > 0) {
-					System.out.println("-----------> TEXT SIZE: " + text_size);
 					text_b = new byte[text_size];
-					System.out.println("Remaining data: " + data.remaining() + " bytes");
 					data.get(text_b, 0, text_size);
-					System.out.println("Remaining data: " + data.remaining() + " bytes [TEXT_BYTES EXTRACTED]");
 					file = new String(text_b, Config.DEFAULT_ENCODING);
 				} else {
 					file = new String("");
@@ -1274,19 +1250,11 @@ public class TuringClientUI {
 			
 		} catch (BufferUnderflowException | BufferOverflowException buff_ex) {
 			JOptionPane.showMessageDialog(mainFrame, "Error retrieving requested file");
-			System.out.println("****************************************");
-			System.out.println("Buffer remaining data: " + data.remaining()
-					+	", trying to extract " + text_size + " bytes");
-			System.out.println("****************************************");
 			return null;
 		}
 		catch (IOException req_ex) {
-			if (!serverOnline()) {
-				JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
-				disableOnlineService();
-			} else {
-				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
-			}
+			JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
+			disableOnlineService();
 			return null;
 		}
 		
@@ -1317,15 +1285,10 @@ public class TuringClientUI {
 			client_ch.write(request);
 		}
 		catch (IOException io_ex) {
-			if (!serverOnline()) {
-				JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
-				disableOnlineService();
-			} else {
-				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
-			}
+			JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
+			disableOnlineService();
 			return;
 		}
-		
 	}
 
 	/* Sends a notification to the server to comunicate that given "section" of "filename" is now free */
@@ -1345,12 +1308,8 @@ public class TuringClientUI {
 			disableChat();
 			CLIENT_STATUS = ONLINE;
 		} catch (IOException req_ex) {
-			if (!serverOnline()) {
-				JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
-				disableOnlineService();
-			} else {
-				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
-			}
+			JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
+			disableOnlineService();
 			return;
 		}
 	}
@@ -1374,26 +1333,6 @@ public class TuringClientUI {
 	
 	/************************************ UTILITY FUNCTIONS ***********************************************/
 	
-	/* Tests if the server is reachable */
-	@SuppressWarnings("resource")
-	private static boolean serverOnline() {
-		try {
-			
-			InetAddress address = InetAddress.getByName(Config.SERVER_IP);  // host reachable
-			Socket sock = new Socket(address, Config.SERVER_PORT); 			
-			if (sock.isConnected()) { // server active, accepting connections
-				sock.close();
-				return true;
-			}
-
-			return false;
-
-		} catch (IOException com_ex) {
-			System.out.println(com_ex.getLocalizedMessage());
-			return false; 
-		}
-	}
-	
 	/* Waits to receive a response code from the server for the current request */
 	private static byte[] getResponse(SocketChannel channel) {
 		ByteBuffer responseBuffer = ByteBuffer.allocate(Config.BUF_SIZE);
@@ -1402,7 +1341,6 @@ public class TuringClientUI {
 		int total = 0;
 		
 		try {
-			
 			while ( channel.read(responseBuffer) <= 0 ) { /* wait for available data on channel */ }
 			
 			do {
@@ -1454,20 +1392,15 @@ public class TuringClientUI {
 			response = getResponse(client_ch);
 			groupAddress = new String(response, Config.DEFAULT_ENCODING);
 		} catch (IOException io_ex) {
-			if (!serverOnline()) {
-				JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
-				disableOnlineService();
-			} else {
-				JOptionPane.showMessageDialog(mainFrame, "Check your connection");
-			}
+			JOptionPane.showMessageDialog(mainFrame, "Server unreachable, try reconnect");
+			disableOnlineService();
 			return null;
 		}
 		
-		System.out.println("Received group address: " + groupAddress);
 		return groupAddress;
 	}
 	
-	/* Checks if the chosen <username, password> meets the requirements */
+	/* Checks if the chosen <username, password> meets the requirements */ 
 	private static boolean isValidUser(String username, char[] password) {
 
 		if (username.length() > 16 || username.length() < 5) {
@@ -1490,11 +1423,14 @@ public class TuringClientUI {
 			notification_ch = SocketChannel.open(server_address);
 			notification_ch.configureBlocking(false);
 			notifyServiceStartRequest(userName);
-			System.out.println("Notification service requested on channel " + notification_ch.getLocalAddress());
 			byte[] response = getResponse(notification_ch);
 			if ( response[0] == Config.SUCCESS) { // start notification listener thread
 				notification_handler = new Thread(new NotificationHandler(notification_ch));
 				notification_handler.start();
+				if (response.length > 1) {
+					String notifications = new String(Arrays.copyOfRange(response, 1, response.length-1));
+					NotificationHandler.displayNotification(notifications);
+				}
 				System.out.println("Notification handler started!");
 			} else {
 				JOptionPane.showMessageDialog(mainFrame, Config.ERROR_LOG(response[0]));
